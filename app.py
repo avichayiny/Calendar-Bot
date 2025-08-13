@@ -29,7 +29,7 @@ TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
-SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.comcom/auth/userinfo.profile']
+SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
 # --- אתחול השרת ---
 app = Flask(__name__)
