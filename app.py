@@ -149,5 +149,31 @@ def webhook():
     
     return 'OK', 200
 
+# --- [חדש] נתיב סודי לאיפוס בסיס הנתונים לצורכי בדיקה ---
+@app.route('/reset-database-for-testing')
+def reset_database():
+    db_file = "bot_database.db"
+    if os.path.exists(db_file):
+        os.remove(db_file)
+        print("--- Database file removed. ---")
+    
+    # מריצים מחדש את הלוגיקה של database_setup.py
+    import sqlite3
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        whatsapp_id TEXT PRIMARY KEY,
+        google_refresh_token TEXT NOT NULL,
+        user_name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    conn.commit()
+    conn.close()
+    print("--- New database file created. ---")
+    
+    return "<h1>Database has been reset successfully!</h1>"
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
