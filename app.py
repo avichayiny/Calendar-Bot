@@ -103,23 +103,55 @@ def parse_datetime_and_title(text):
 # --- עמודי האינטרנט לתהליך ההרשמה (ללא שינוי) ---
 @app.route('/register')
 def register():
-    # ... תוכן הפונקציה נשאר זהה ...
     session['whatsapp_id'] = request.args.get('wa_id')
-    flow = Flow.from_client_secrets_file(CLIENT_SECRET_FILE, scopes=SCOPES, redirect_uri=url_for('oauth2callback', _external=True))
+    
+    # [תיקון] יוצרים את ה-Flow ממשתני הסביבה
+    flow = Flow.from_client_config(
+        client_config={
+            "web": {
+                "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+                "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "redirect_uris": [url_for('oauth2callback', _external=True)],
+            }
+        },
+        scopes=SCOPES,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
     authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
     session['state'] = state
     return redirect(authorization_url)
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    # ... תוכן הפונקציה נשאר זהה ...
-    state = session['state']; flow = Flow.from_client_secrets_file(CLIENT_SECRET_FILE, scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True))
-    flow.fetch_token(authorization_response=request.url); credentials = flow.credentials; refresh_token = credentials.refresh_token
-    whatsapp_id = session['whatsapp_id']; user_info_service = build('oauth2', 'v2', credentials=credentials)
-    user_info = user_info_service.userinfo().get().execute(); user_name = user_info.get('name', 'User')
+    state = session['state']
+    
+    # [תיקון] יוצרים את ה-Flow ממשתני הסביבה
+    flow = Flow.from_client_config(
+        client_config={
+            "web": {
+                "client_id": os.getenv('GOOGLE_CLIENT_ID'),
+                "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=SCOPES,
+        state=state,
+        redirect_uri=url_for('oauth2callback', _external=True)
+    )
+    
+    flow.fetch_token(authorization_response=request.url)
+    credentials = flow.credentials
+    refresh_token = credentials.refresh_token
+    whatsapp_id = session['whatsapp_id']
+    user_info_service = build('oauth2', 'v2', credentials=credentials)
+    user_info = user_info_service.userinfo().get().execute()
+    user_name = user_info.get('name', 'User')
     add_user(whatsapp_id, refresh_token, user_name)
     return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
-
 # --- [חדש] Webhook ראשי מותאם ל-Twilio ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
