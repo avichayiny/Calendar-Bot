@@ -1,10 +1,10 @@
-# google_calendar_handler.py (גרסת משתמשים מרובים)
+# google_calendar_handler.py (גרסת משתמשים מרובים - מתוקן)
 
+import json
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-# חשוב: קובץ זה חייב להיות קיים בתיקייה
 CLIENT_SECRET_FILE = 'credentials.json' 
 
 def create_event_for_user(user_refresh_token, summary, start_time, end_time):
@@ -15,14 +15,22 @@ def create_event_for_user(user_refresh_token, summary, start_time, end_time):
         return "Error: No refresh token provided."
 
     try:
-        # יוצרים אובייקט Credentials מה-refresh_token
+        # --- [התיקון] ---
+        # 1. טען את סודות הלקוח (תעודת הזהות של הבוט) מהקובץ
+        with open(CLIENT_SECRET_FILE) as f:
+            client_secrets = json.load(f)['installed']
+        
+        # 2. צור את אובייקט ההרשאות עם כל המידע הנדרש
         creds = Credentials.from_authorized_user_info(
-            info={'refresh_token': user_refresh_token},
+            info={
+                'refresh_token': user_refresh_token,
+                'client_id': client_secrets['client_id'],
+                'client_secret': client_secrets['client_secret']
+            },
             scopes=SCOPES
         )
-        # טוענים את סודות הלקוח שלנו כדי שהרענון יוכל לעבוד
-        creds.with_client_secrets_file = CLIENT_SECRET_FILE
-
+        
+        # הרענון יתרחש אוטומטית אם צריך
         service = build('calendar', 'v3', credentials=creds)
 
         event = {
