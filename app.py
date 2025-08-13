@@ -1,9 +1,11 @@
-# app.py (גרסה 19.0 - Twilio Edition)
+# app.py (גרסה 20.0 - הגרסה המאוחדת והסופית)
 
 import os
+import json
+import re
+import requests
 from flask import Flask, request, redirect, session, url_for
 from dotenv import load_dotenv
-import re
 from datetime import datetime, time, timedelta
 
 # --- ייבואים מהקבצים שלנו ---
@@ -14,27 +16,30 @@ from google_calendar_handler import create_event_for_user
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- [חדש] ייבוא ספריית Twilio ---
+# --- ייבוא ספריית Twilio ---
 from twilio.rest import Client
 
 # --- טעינת משתני הסביבה ---
 load_dotenv()
+# Twilio Credentials
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+# Google Credentials for Render
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
-# הגדרות לתהליך האימות של גוגל
-CLIENT_SECRET_FILE = 'credentials.json'
-SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
+SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.comcom/auth/userinfo.profile']
 
 # --- אתחול השרת ---
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- [חדש] פונקציות עזר מותאמות ל-Twilio ---
+# --- פונקציות עזר ---
 def parse_twilio_message(incoming_data):
     try:
         message_text = incoming_data.get('Body')
+        # הפורמט של מספר השולח מ-Twilio הוא 'whatsapp:+972...'
         sender_phone_number = incoming_data.get('From')
         return sender_phone_number, message_text
     except Exception:
@@ -52,17 +57,23 @@ def send_whatsapp_message(to_phone_number, message):
     except Exception as e:
         print(f"Error sending Twilio message: {e}")
 
-# --- מנוע פיענוח (הגרסה היציבה שלנו - ללא שינוי) ---
+# --- מנוע פיענוח (הגרסה היציבה) ---
 def parse_datetime_and_title(text):
-    # ... כל הקוד של הפונקציה הזו נשאר זהה לחלוטין ...
-    now = datetime.now(); original_text = text
+    now = datetime.now()
+    original_text = text
     date_obj, extracted_time, date_string_found, time_string_found = None, None, "", ""
+
     time_pattern = r'\b(ב-?\s*)?(\d{1,2})(:(\d{2}))?\b'
     time_matches = [m for m in re.finditer(time_pattern, text) if 0 <= int(m.group(2)) <= 23]
     if time_matches:
-        time_match = time_matches[-1]; hour = int(time_match.group(2)); minute = int(time_match.group(4)) if time_match.group(4) else 0
-        extracted_time = time(hour, minute); time_string_found = time_match.group(0)
-    else: extracted_time = time(9, 0)
+        time_match = time_matches[-1]
+        hour = int(time_match.group(2))
+        minute = int(time_match.group(4)) if time_match.group(4) else 0
+        extracted_time = time(hour, minute)
+        time_string_found = time_match.group(0)
+    else:
+        extracted_time = time(9, 0)
+
     months_he = "ינואר|פברואר|מרץ|אפריל|מאי|יוני|יולי|אוגוסט|ספטמבר|אוקטובר|נובמבר|דצמבר"
     full_date_pattern = rf'\b(ב|ל)?(\d{{1,2}})\s+(?:ב|ל)?({months_he})\b'
     full_date_match = re.search(full_date_pattern, text)
@@ -71,7 +82,8 @@ def parse_datetime_and_title(text):
         month_map = {'ינואר': 1, 'פברואר': 2, 'מרץ': 3, 'אפריל': 4, 'מאי': 5, 'יוני': 6, 'יולי': 7, 'אוגוסט': 8, 'ספטמבר': 9, 'אוקטובר': 10, 'נובמבר': 11, 'דצמבר': 12}
         month = month_map[month_str]; year = now.year
         if datetime(year, month, day, 23, 59) < now: year += 1
-        date_obj = datetime(year, month, day).date(); date_string_found = full_date_match.group(0)
+        date_obj = datetime(year, month, day).date()
+        date_string_found = full_date_match.group(0)
     else:
         relative_match = re.search(r'\b(מחרתיים|מחר)\b', text)
         if relative_match:
@@ -86,73 +98,79 @@ def parse_datetime_and_title(text):
             if weekday_match:
                 day_str = weekday_match.group(2)
                 weekday_map = {'ראשון': 6, 'שני': 0, 'שלישי': 1, 'רביעי': 2, 'חמישי': 3, 'שישי': 4, 'שבת': 5}
-                target_weekday = weekday_map[day_str]; days_ahead = (target_weekday - now.weekday() + 7) % 7
+                target_weekday = weekday_map[day_str]
+                days_ahead = (target_weekday - now.weekday() + 7) % 7
                 if days_ahead == 0: days_ahead = 7
-                date_obj = (now + timedelta(days=days_ahead)).date(); date_string_found = weekday_match.group(0)
+                date_obj = (now + timedelta(days=days_ahead)).date()
+                date_string_found = weekday_match.group(0)
+
     if not date_obj: date_obj = now.date()
     final_datetime = datetime.combine(date_obj, extracted_time)
+
     event_title = original_text
-    if time_string_found: event_title = event_title.replace(time_string_found, '', 1)
-    if date_string_found: event_title = event_title.replace(date_string_found, '', 1)
-    stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה']
+    parts_to_remove = []
+    if time_string_found: parts_to_remove.append(time_string_found)
+    if date_string_found: parts_to_remove.append(date_string_found)
+    parts_to_remove.sort(key=len, reverse=True)
+    for part in parts_to_remove:
+        event_title = event_title.replace(part, '', 1)
+
+    stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה', 'ביום']
     for word in stop_words: event_title = event_title.replace(word, '')
+    
     event_title = re.sub(r'\s+', ' ', event_title).strip()
     if not event_title: event_title = "אירוע ללא כותרת"
+
     return final_datetime, event_title
 
-# --- עמודי האינטרנט לתהליך ההרשמה (ללא שינוי) ---
+# --- עמודי האינטרנט לתהליך ההרשמה ---
 @app.route('/register')
 def register():
+    wa_id = request.args.get('wa_id')
+    if not wa_id: return "<h1>שגיאה: מספר וואטסאפ חסר.</h1>", 400
+    auth_link = url_for('start_auth', wa_id=wa_id, _external=True)
+    return f"""
+    <!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>אישור חיבור</title>
+    <style>body{{font-family:Arial,sans-serif;text-align:center;padding:50px;}} a{{display:inline-block;padding:15px 25px;font-size:18px;color:white;background-color:#4285F4;text-decoration:none;border-radius:5px;}}</style>
+    </head><body><h1>כמעט סיימנו!</h1><p>כדי לחבר את יומן גוגל שלך, לחץ על הכפתור למטה:</p><a href="{auth_link}">התחבר עם גוגל</a></body></html>
+    """
+
+@app.route('/start-auth')
+def start_auth():
     session['whatsapp_id'] = request.args.get('wa_id')
-    
-    # [תיקון] יוצרים את ה-Flow ממשתני הסביבה
     flow = Flow.from_client_config(
-        client_config={
-            "web": {
-                "client_id": os.getenv('GOOGLE_CLIENT_ID'),
-                "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                "redirect_uris": [url_for('oauth2callback', _external=True)],
-            }
-        },
-        scopes=SCOPES,
-        redirect_uri=url_for('oauth2callback', _external=True)
+        client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
+        scopes=SCOPES, redirect_uri=url_for('oauth2callback', _external=True)
     )
-    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent')
     session['state'] = state
     return redirect(authorization_url)
 
 @app.route('/oauth2callback')
 def oauth2callback():
     state = session['state']
-    
-    # [תיקון] יוצרים את ה-Flow ממשתני הסביבה
     flow = Flow.from_client_config(
-        client_config={
-            "web": {
-                "client_id": os.getenv('GOOGLE_CLIENT_ID'),
-                "client_secret": os.getenv('GOOGLE_CLIENT_SECRET'),
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-            }
-        },
-        scopes=SCOPES,
-        state=state,
-        redirect_uri=url_for('oauth2callback', _external=True)
+        client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
+        scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True)
     )
-    
-    flow.fetch_token(authorization_response=request.url)
-    credentials = flow.credentials
-    refresh_token = credentials.refresh_token
-    whatsapp_id = session['whatsapp_id']
-    user_info_service = build('oauth2', 'v2', credentials=credentials)
-    user_info = user_info_service.userinfo().get().execute()
-    user_name = user_info.get('name', 'User')
-    add_user(whatsapp_id, refresh_token, user_name)
-    return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
-# --- [חדש] Webhook ראשי מותאם ל-Twilio ---
+    try:
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+        if not credentials or not credentials.refresh_token:
+            return "<h1>שגיאה: לא התקבל מפתח רענון מגוגל. נסה שוב.</h1>", 400
+        
+        refresh_token = credentials.refresh_token
+        whatsapp_id = session['whatsapp_id']
+        user_info_service = build('oauth2', 'v2', credentials=credentials)
+        user_info = user_info_service.userinfo().get().execute()
+        user_name = user_info.get('name', 'User')
+        add_user(whatsapp_id, refresh_token, user_name)
+        return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
+    except Exception as e:
+        print(f"Error in oauth2callback: {e}")
+        return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
+
+# --- Webhook ראשי ---
 @app.route('/webhook', methods=['POST'])
 def webhook():
     incoming_data = request.values
@@ -181,30 +199,19 @@ def webhook():
     
     return 'OK', 200
 
-# --- [חדש] נתיב סודי לאיפוס בסיס הנתונים לצורכי בדיקה ---
+# --- נתיב לאיפוס בסיס הנתונים ---
 @app.route('/reset-database-for-testing')
 def reset_database():
     db_file = "bot_database.db"
     if os.path.exists(db_file):
         os.remove(db_file)
-        print("--- Database file removed. ---")
-    
-    # מריצים מחדש את הלוגיקה של database_setup.py
     import sqlite3
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        whatsapp_id TEXT PRIMARY KEY,
-        google_refresh_token TEXT NOT NULL,
-        user_name TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    conn.commit()
-    conn.close()
-    print("--- New database file created. ---")
-    
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+        whatsapp_id TEXT PRIMARY KEY, google_refresh_token TEXT NOT NULL,
+        user_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit(); conn.close()
     return "<h1>Database has been reset successfully!</h1>"
 
 if __name__ == '__main__':
