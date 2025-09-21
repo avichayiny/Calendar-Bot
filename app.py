@@ -167,28 +167,25 @@ def oauth2callback():
         print(f"Error in oauth2callback: {e}")
         return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
 
-# --- Webhook ראשי עם זיהוי כוונות משולש (יצירה, שאילתה, מחיקה) ---
+# --- Webhook ראשי עם זיהוי כוונות משולש (מתוקן) ---
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
-    # אימות ה-Webhook מול מטא
     if request.method == 'GET':
         if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.challenge"):
             if not request.args.get("hub.verify_token") == APP_VERIFY_TOKEN: return "Verification token mismatch", 403
             return request.args.get("hub.challenge"), 200
         return "Hello World", 200
 
-    # קבלת הודעות חדשות
     elif request.method == 'POST':
         data = request.get_json()
         sender_phone, message_text = parse_whatsapp_message(data)
-
+        
         if sender_phone and message_text:
             user_token = get_user_token(sender_phone)
-
+            
             if user_token:
                 print(f"Known user: {sender_phone}. Processing message: '{message_text}'")
-
-                # --- [השדרוג] זיהוי כוונת המשתמש ---
+                
                 query_keywords = ['מה יש לי', 'מה הלוז', 'האם אני פנוי', 'מה יש']
                 delete_keywords = ['מחק', 'בטל', 'הסר']
                 
@@ -201,7 +198,7 @@ def webhook():
                     result = parse_datetime_and_title(message_text)
                     target_datetime = result[0] if result else datetime.now()
                     events = get_events_for_day(user_token, target_datetime.date())
-
+                    
                     if events is None:
                         response_message = "אירעה שגיאה בבדיקת היומן שלך."
                     elif not events:
@@ -217,7 +214,7 @@ def webhook():
                     send_whatsapp_message(sender_phone, response_message)
 
                 elif is_delete:
-                    # --- [חדש] לוגיקה לטיפול בבקשת מחיקה ---
+                    # --- לוגיקה מתוקנת: טיפול בבקשת מחיקה ---
                     print("User intent: Delete event")
                     result = parse_datetime_and_title(message_text)
                     
@@ -227,19 +224,18 @@ def webhook():
                         
                         event_to_delete = None
                         if events:
-                            # נחפש אירוע שתואם לפרטים
                             for event in events:
                                 start = event['start'].get('dateTime', event['start'].get('date'))
-                                start_time_obj = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                start_time_obj_aware = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                # <-- [התיקון] הופכים את הזמן ל"לא מודע" לפני ההשוואה
+                                start_time_obj_naive = start_time_obj_aware.replace(tzinfo=None)
                                 
-                                time_difference = abs((start_time_obj - target_datetime).total_seconds())
+                                time_difference = abs((start_time_obj_naive - target_datetime).total_seconds())
                                 title_match = event_keywords.lower() in event['summary'].lower()
 
-                                # אם יש התאמה גם בשעה וגם בכותרת (או רק אחד מהם אם השני לא צוין)
-                                if time_difference < 3600 or (not event_keywords and time_difference < 60):
-                                    if not event_keywords or title_match:
-                                        event_to_delete = event
-                                        break
+                                if time_difference < 3600 and title_match:
+                                    event_to_delete = event
+                                    break
                         
                         if event_to_delete:
                             success = delete_event(user_token, event_to_delete['id'])
@@ -273,9 +269,9 @@ def webhook():
                 registration_link = url_for('register', wa_id=sender_phone, _external=True)
                 message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
                 send_whatsapp_message(sender_phone, message)
-
-        return 'OK', 200
-    return 'Unsupported method', 405
+            
+            return 'OK', 200
+        return 'Unsupported method', 405
 
 # --- נתיב לאיפוס בסיס הנתונים ---
 @app.route('/reset-database-for-testing')
