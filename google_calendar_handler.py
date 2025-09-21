@@ -82,3 +82,32 @@ def get_events_for_day(user_refresh_token, target_date):
         print(f"An error occurred in get_events_for_day: {e}")
         return None
 
+def delete_event(user_refresh_token, event_id):
+    """
+    מוחק אירוע ספציפי מהיומן של המשתמש לפי ה-ID שלו.
+    """
+    try:
+        # קוד האימות זהה לפונקציות הקודמות
+        creds = Credentials.from_authorized_user_info(
+            info={
+                'refresh_token': user_refresh_token,
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET
+            },
+            scopes=SCOPES
+        )
+
+        service = build('calendar', 'v3', credentials=creds)
+
+        # קריאה ל-API של גוגל כדי למחוק את האירוע
+        service.events().delete(
+            calendarId='primary', 
+            eventId=event_id
+        ).execute()
+
+        print(f"Successfully deleted event with ID: {event_id}")
+        return True # החזר True בהצלחה
+
+    except Exception as e:
+        print(f"An error occurred in delete_event: {e}")
+        return False # החזר False בכישלון

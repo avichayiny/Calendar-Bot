@@ -10,7 +10,7 @@ from datetime import datetime, time, timedelta
 
 # --- ייבואים מהקבצים שלנו ---
 from database_handler import add_user, get_user_token
-from google_calendar_handler import create_event_for_user, get_events_for_day
+from google_calendar_handler import create_event_for_user, get_events_for_day, delete_event
 
 # --- ייבואים לתהליך האימות של גוגל ---
 from google_auth_oauthlib.flow import Flow
@@ -167,7 +167,7 @@ def oauth2callback():
         print(f"Error in oauth2callback: {e}")
         return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
 
-# --- Webhook ראשי עם זיהוי כוונות (מותאם למטא) ---
+# --- Webhook ראשי עם זיהוי כוונות משולש (יצירה, שאילתה, מחיקה) ---
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
     # אימות ה-Webhook מול מטא
@@ -190,15 +190,16 @@ def webhook():
 
                 # --- [השדרוג] זיהוי כוונת המשתמש ---
                 query_keywords = ['מה יש לי', 'מה הלוז', 'האם אני פנוי', 'מה יש']
+                delete_keywords = ['מחק', 'בטל', 'הסר']
+                
                 is_query = any(keyword in message_text for keyword in query_keywords)
+                is_delete = any(keyword in message_text for keyword in delete_keywords)
 
                 if is_query:
-                    # --- לוגיקה חדשה: טיפול בשאילתה ---
+                    # --- לוגיקה קיימת: טיפול בשאילתה ---
                     print("User intent: Query calendar")
                     result = parse_datetime_and_title(message_text)
-
                     target_datetime = result[0] if result else datetime.now()
-
                     events = get_events_for_day(user_token, target_datetime.date())
 
                     if events is None:
@@ -212,7 +213,45 @@ def webhook():
                             start_time_obj = datetime.fromisoformat(start.replace('Z', '+00:00'))
                             start_time_str = start_time_obj.strftime('%H:%M')
                             response_message += f"\n- {start_time_str}: {event['summary']}"
+                    
+                    send_whatsapp_message(sender_phone, response_message)
 
+                elif is_delete:
+                    # --- [חדש] לוגיקה לטיפול בבקשת מחיקה ---
+                    print("User intent: Delete event")
+                    result = parse_datetime_and_title(message_text)
+                    
+                    if result:
+                        target_datetime, event_keywords = result
+                        events = get_events_for_day(user_token, target_datetime.date())
+                        
+                        event_to_delete = None
+                        if events:
+                            # נחפש אירוע שתואם לפרטים
+                            for event in events:
+                                start = event['start'].get('dateTime', event['start'].get('date'))
+                                start_time_obj = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                
+                                time_difference = abs((start_time_obj - target_datetime).total_seconds())
+                                title_match = event_keywords.lower() in event['summary'].lower()
+
+                                # אם יש התאמה גם בשעה וגם בכותרת (או רק אחד מהם אם השני לא צוין)
+                                if time_difference < 3600 or (not event_keywords and time_difference < 60):
+                                    if not event_keywords or title_match:
+                                        event_to_delete = event
+                                        break
+                        
+                        if event_to_delete:
+                            success = delete_event(user_token, event_to_delete['id'])
+                            if success:
+                                response_message = f"האירוע '{event_to_delete['summary']}' נמחק בהצלחה."
+                            else:
+                                response_message = "אירעה שגיאה במחיקת האירוע."
+                        else:
+                            response_message = "מצטער, לא מצאתי אירוע שתואם לתיאור שלך."
+                    else:
+                        response_message = "לא הבנתי איזה אירוע למחוק. נסה לציין תאריך ומילת מפתח מהכותרת."
+                    
                     send_whatsapp_message(sender_phone, response_message)
 
                 else:
