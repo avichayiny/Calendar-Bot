@@ -1,4 +1,4 @@
-# app.py (גרסה 20.0 - הגרסה המאוחדת והסופית)
+# app.py (גרסה 17.0 - הגרסה השלמה והנקייה)
 
 import os
 import json
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 
 # --- ייבואים מהקבצים שלנו ---
+# ודא שהקבצים האלה קיימים באותה תיקייה
 from database_handler import add_user, get_user_token
 from google_calendar_handler import create_event_for_user
 
@@ -16,54 +17,63 @@ from google_calendar_handler import create_event_for_user
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- ייבוא ספריית Twilio ---
-from twilio.rest import Client
-
 # --- טעינת משתני הסביבה ---
 load_dotenv()
-# Twilio Credentials
-TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
-TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
-TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
-# Google Credentials for Render
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+APP_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
+APP_ACCESS_TOKEN = os.getenv('META_ACCESS_TOKEN')
+PHONE_NUMBER_ID = os.getenv('META_PHONE_NUMBER_ID')
 
+# הגדרות לתהליך האימות של גוגל
+CLIENT_SECRET_FILE = 'credentials.json'
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
 # --- אתחול השרת ---
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.urandom(24) # חיוני לאבטחת סשנים
 
-# --- פונקציות עזר ---
-def parse_twilio_message(incoming_data):
+# --- פונקציות עזר קבועות ---
+def parse_whatsapp_message(data):
     try:
-        message_text = incoming_data.get('Body')
-        # הפורמט של מספר השולח מ-Twilio הוא 'whatsapp:+972...'
-        sender_phone_number = incoming_data.get('From')
+        message_object = data['entry'][0]['changes'][0]['value']['messages'][0]
+        message_text = message_object['text']['body']
+        sender_phone_number = message_object['from']
         return sender_phone_number, message_text
-    except Exception:
+    except (KeyError, IndexError):
         return None, None
 
-def send_whatsapp_message(to_phone_number, message):
+def send_whatsapp_message1(to_phone_number, message):
+    headers = {
+        "Authorization": f"Bearer {APP_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    url = f"https://graph.facebook.com/v19.0/{PHONE_NUMBER_ID}/messages"
+    data = { "messaging_product": "whatsapp", "to": to_phone_number, "text": {"body": message} }
+    print(f"--- Sending WhatsApp Message to {to_phone_number} ---")
     try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        client.messages.create(
-            from_=TWILIO_PHONE_NUMBER,
-            body=message,
-            to=to_phone_number
-        )
-        print(f"--- Successfully sent Twilio message to {to_phone_number} ---")
-    except Exception as e:
-        print(f"Error sending Twilio message: {e}")
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        print(f"Meta API Response: Status={response.status_code}, Body={response.json()}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending WhatsApp message: {e}")
 
-# --- מנוע פיענוח (הגרסה היציבה) ---
+def send_whatsapp_message(to_phone_number, message):
+    """
+    בזמן הפיתוח המקומי, הפונקציה הזו רק מדפיסה את ההודעה לטרמינל
+    במקום באמת לשלוח אותה לוואטסאפ.
+    """
+    print("\n" + "="*50)
+    print(f"--- SIMULATED WHATSAPP MESSAGE ---")
+    print(f"TO: {to_phone_number}")
+    print(f"MESSAGE:\n{message}")
+    print("="*50 + "\n")
+
+# --- מנוע פיענוח מבוסס חוקים (הגרסה היציבה) ---
 def parse_datetime_and_title(text):
     now = datetime.now()
     original_text = text
     date_obj, extracted_time, date_string_found, time_string_found = None, None, "", ""
 
-    time_pattern = r'\b(ב-?\s*)?(\d{1,2})(:(\d{2}))?\b'
+    time_pattern = r'\b(ב-?\s*)?([0-2]?[0-9])(:([0-5][0-9]))?\b'
     time_matches = [m for m in re.finditer(time_pattern, text) if 0 <= int(m.group(2)) <= 23]
     if time_matches:
         time_match = time_matches[-1]
@@ -108,111 +118,124 @@ def parse_datetime_and_title(text):
     final_datetime = datetime.combine(date_obj, extracted_time)
 
     event_title = original_text
-    parts_to_remove = []
-    if time_string_found: parts_to_remove.append(time_string_found)
-    if date_string_found: parts_to_remove.append(date_string_found)
-    parts_to_remove.sort(key=len, reverse=True)
-    for part in parts_to_remove:
-        event_title = event_title.replace(part, '', 1)
-
-    stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה', 'ביום']
+    if time_string_found: event_title = event_title.replace(time_string_found, '', 1)
+    if date_string_found: event_title = event_title.replace(date_string_found, '', 1)
+    stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה']
     for word in stop_words: event_title = event_title.replace(word, '')
-    
     event_title = re.sub(r'\s+', ' ', event_title).strip()
     if not event_title: event_title = "אירוע ללא כותרת"
 
     return final_datetime, event_title
 
-# --- עמודי האינטרנט לתהליך ההרשמה ---
-@app.route('/register')
-def register():
-    wa_id = request.args.get('wa_id')
-    if not wa_id: return "<h1>שגיאה: מספר וואטסאפ חסר.</h1>", 400
-    auth_link = url_for('start_auth', wa_id=wa_id, _external=True)
-    return f"""
-    <!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>אישור חיבור</title>
-    <style>body{{font-family:Arial,sans-serif;text-align:center;padding:50px;}} a{{display:inline-block;padding:15px 25px;font-size:18px;color:white;background-color:#4285F4;text-decoration:none;border-radius:5px;}}</style>
-    </head><body><h1>כמעט סיימנו!</h1><p>כדי לחבר את יומן גוגל שלך, לחץ על הכפתור למטה:</p><a href="{auth_link}">התחבר עם גוגל</a></body></html>
-    """
+# --- [חדש] עמודי האינטרנט לתהליך ההרשמה (עם דיבאג) ---
 
-@app.route('/start-auth')
-def start_auth():
-    session['whatsapp_id'] = request.args.get('wa_id')
-    flow = Flow.from_client_config(
-        client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
-        scopes=SCOPES, redirect_uri=url_for('oauth2callback', _external=True)
-    )
-    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent')
-    session['state'] = state
-    return redirect(authorization_url)
+@app.route('/auth')
+def register():
+    """העמוד שאליו הקישור מהוואטסאפ מוביל."""
+    print("\n--- [DEBUG] Reached /register route ---")
+    wa_id = request.args.get('wa_id')
+    print(f"[DEBUG] wa_id from URL: {wa_id}")
+
+    if not wa_id:
+        return "<h1>Error: Missing wa_id in URL. Please use the full link from the terminal.</h1>", 400
+
+    session['whatsapp_id'] = wa_id
+    print(f"[DEBUG] whatsapp_id saved to session: {session['whatsapp_id']}")
+
+    try:
+        flow = Flow.from_client_secrets_file(
+            CLIENT_SECRET_FILE,
+            scopes=SCOPES,
+            redirect_uri=url_for('oauth2callback', _external=True)
+        )
+        authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+        
+        session['state'] = state
+        print(f"[DEBUG] Redirecting to Google URL: {authorization_url}")
+        return redirect(authorization_url)
+    except Exception as e:
+        print(f"[DEBUG] ERROR during flow creation: {e}")
+        return f"<h1>An error occurred: {e}</h1>", 500
 
 @app.route('/oauth2callback')
 def oauth2callback():
+    """העמוד שאליו גוגל מחזיר את המשתמש אחרי שהוא מאשר."""
+    print("\n--- [DEBUG] Reached /oauth2callback route ---")
+    
+    # ודא שה-state שהגיע מגוגל תואם לזה ששמרנו
+    if 'state' not in session or session['state'] != request.args['state']:
+        return "<h1>State mismatch error. Please try again.</h1>", 400
     state = session['state']
-    flow = Flow.from_client_config(
-        client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
-        scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True)
-    )
+    
+    flow = Flow.from_client_secrets_file(CLIENT_SECRET_FILE, scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True))
+    
     try:
         flow.fetch_token(authorization_response=request.url)
-        credentials = flow.credentials
-        if not credentials or not credentials.refresh_token:
-            return "<h1>שגיאה: לא התקבל מפתח רענון מגוגל. נסה שוב.</h1>", 400
         
+        credentials = flow.credentials
         refresh_token = credentials.refresh_token
-        whatsapp_id = session['whatsapp_id']
+        
+        whatsapp_id = session.get('whatsapp_id')
+        print(f"[DEBUG] whatsapp_id retrieved from session: {whatsapp_id}")
+
+        if not whatsapp_id or not refresh_token:
+            return "<h1>Error: Could not retrieve user details or refresh token. Please try again.</h1>", 400
+
         user_info_service = build('oauth2', 'v2', credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
         user_name = user_info.get('name', 'User')
+        
         add_user(whatsapp_id, refresh_token, user_name)
+        
         return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
     except Exception as e:
-        print(f"Error in oauth2callback: {e}")
-        return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
+        print(f"[DEBUG] ERROR during token fetch: {e}")
+        return f"<h1>An error occurred during token fetch: {e}</h1>", 500
 
+@app.route('/test')
+def test_route():
+    print("\n--- [SUCCESS] Reached the /test route! ---\n")
+    return "<h1>It works! The server is reachable from the browser.</h1>"
 # --- Webhook ראשי ---
-@app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
-    incoming_data = request.values
-    sender_phone, message_text = parse_twilio_message(incoming_data)
-    
-    if sender_phone and message_text:
-        user_token = get_user_token(sender_phone)
-        
-        if user_token:
-            print(f"Known user: {sender_phone}. Processing message.")
-            result = parse_datetime_and_title(message_text)
-            if result:
-                start_datetime, event_title = result
-                end_datetime = start_datetime + timedelta(hours=1)
-                event_link = create_event_for_user(user_token, event_title, start_datetime.isoformat(), end_datetime.isoformat())
-                confirmation_message = f"בסדר, קבעתי!\nאירוע: {event_title}\nבתאריך: {start_datetime.strftime('%d/%m/%Y')} בשעה {start_datetime.strftime('%H:%M')}\n\nקישור: {event_link}"
-                send_whatsapp_message(sender_phone, confirmation_message)
-            else:
-                error_message = "מצטער, לא הצלחתי להבין את התאריך והשעה."
-                send_whatsapp_message(sender_phone, error_message)
-        else:
-            print(f"New user: {sender_phone}. Sending registration link.")
-            registration_link = url_for('register', wa_id=sender_phone, _external=True)
-            message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
-            send_whatsapp_message(sender_phone, message)
-    
-    return 'OK', 200
+    if request.method == 'GET':
+        if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.challenge"):
+            if not request.args.get("hub.verify_token") == APP_VERIFY_TOKEN: return "Verification token mismatch", 403
+            return request.args.get("hub.challenge"), 200
+        return "Hello World", 200
 
-# --- נתיב לאיפוס בסיס הנתונים ---
-@app.route('/reset-database-for-testing')
-def reset_database():
-    db_file = "bot_database.db"
-    if os.path.exists(db_file):
-        os.remove(db_file)
-    import sqlite3
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-        whatsapp_id TEXT PRIMARY KEY, google_refresh_token TEXT NOT NULL,
-        user_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit(); conn.close()
-    return "<h1>Database has been reset successfully!</h1>"
+    elif request.method == 'POST':
+        data = request.get_json()
+        sender_phone, message_text = parse_whatsapp_message(data)
+        
+        if sender_phone and message_text:
+            user_token = get_user_token(sender_phone)
+            
+            if user_token:
+                print(f"Known user: {sender_phone}. Processing message.")
+                result = parse_datetime_and_title(message_text)
+                if result:
+                    start_datetime, event_title = result
+                    end_datetime = start_datetime + timedelta(hours=1)
+                    start_iso = start_datetime.isoformat()
+                    end_iso = end_datetime.isoformat()
+                    
+                    event_link = create_event_for_user(user_token, event_title, start_iso, end_iso)
+                    
+                    confirmation_message = f"בסדר, קבעתי!\nאירוע: {event_title}\nבתאריך: {start_datetime.strftime('%d/%m/%Y')} בשעה {start_datetime.strftime('%H:%M')}\n\nקישור: {event_link}"
+                    send_whatsapp_message(sender_phone, confirmation_message)
+                else:
+                    error_message = "מצטער, לא הצלחתי להבין את התאריך והשעה בהודעה שלך."
+                    send_whatsapp_message(sender_phone, error_message)
+            else:
+                print(f"New user: {sender_phone}. Sending registration link.")
+                registration_link = f"http://127.0.0.1:5000/auth?wa_id={sender_phone}"
+                message = f"שלום! נראה שזו הפעם הראשונה שלך כאן. כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
+                send_whatsapp_message(sender_phone, message)
+        
+        return 'OK', 200
+    return 'Unsupported method', 405
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
