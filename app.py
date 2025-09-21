@@ -114,6 +114,13 @@ def parse_datetime_and_title(text):
 
     stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה', 'ביום']
     for word in stop_words: event_title = event_title.replace(word, '')
+
+    # --- [התיקון המקומי] ---
+    # נוסיף לולאה שתנקה את מילות הפקודה של המחיקה מהכותרת
+    delete_keywords = ['מחק', 'בטל', 'הסר']
+    for word in delete_keywords:
+        event_title = event_title.replace(word, '')
+    # -------------------------
     
     event_title = re.sub(r'\s+', ' ', event_title).strip()
     if not event_title: event_title = "אירוע ללא כותרת"
