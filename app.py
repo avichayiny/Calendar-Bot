@@ -28,7 +28,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 
 # --- אתחול השרת ---
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 # --- [שדרוג] פונקציות עזר מותאמות למטא ---
 def parse_whatsapp_message(data):
