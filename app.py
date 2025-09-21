@@ -10,7 +10,7 @@ from datetime import datetime, time, timedelta
 
 # --- ייבואים מהקבצים שלנו ---
 from database_handler import add_user, get_user_token
-from google_calendar_handler import create_event_for_user
+from google_calendar_handler import create_event_for_user, get_events_for_day
 
 # --- ייבואים לתהליך האימות של גוגל ---
 from google_auth_oauthlib.flow import Flow
@@ -167,7 +167,7 @@ def oauth2callback():
         print(f"Error in oauth2callback: {e}")
         return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
 
-# --- Webhook ראשי (מותאם למטא) ---
+# --- Webhook ראשי עם זיהוי כוונות (מותאם למטא) ---
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
     # אימות ה-Webhook מול מטא
@@ -181,28 +181,62 @@ def webhook():
     elif request.method == 'POST':
         data = request.get_json()
         sender_phone, message_text = parse_whatsapp_message(data)
-        
+
         if sender_phone and message_text:
             user_token = get_user_token(sender_phone)
+
             if user_token:
-                print(f"Known user: {sender_phone}. Processing message.")
-                result = parse_datetime_and_title(message_text)
-                if result:
-                    start_datetime, event_title = result
-                    end_datetime = start_datetime + timedelta(hours=1)
-                    event_link = create_event_for_user(user_token, event_title, start_datetime.isoformat(), end_datetime.isoformat())
-                    confirmation_message = f"בסדר, קבעתי!\nאירוע: {event_title}\nבתאריך: {start_datetime.strftime('%d/%m/%Y')} בשעה {start_datetime.strftime('%H:%M')}\n\nקישור: {event_link}"
-                    send_whatsapp_message(sender_phone, confirmation_message)
+                print(f"Known user: {sender_phone}. Processing message: '{message_text}'")
+
+                # --- [השדרוג] זיהוי כוונת המשתמש ---
+                query_keywords = ['מה יש לי', 'מה הלוז', 'האם אני פנוי', 'מה יש']
+                is_query = any(keyword in message_text for keyword in query_keywords)
+
+                if is_query:
+                    # --- לוגיקה חדשה: טיפול בשאילתה ---
+                    print("User intent: Query calendar")
+                    result = parse_datetime_and_title(message_text)
+
+                    target_datetime = result[0] if result else datetime.now()
+
+                    events = get_events_for_day(user_token, target_datetime.date())
+
+                    if events is None:
+                        response_message = "אירעה שגיאה בבדיקת היומן שלך."
+                    elif not events:
+                        response_message = f"אתה פנוי לגמרי ב-{target_datetime.strftime('%d/%m/%Y')}! אין לך אירועים ביומן."
+                    else:
+                        response_message = f"הנה הלו\"ז שלך ל-{target_datetime.strftime('%d/%m/%Y')}:\n"
+                        for event in events:
+                            start = event['start'].get('dateTime', event['start'].get('date'))
+                            start_time_obj = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                            start_time_str = start_time_obj.strftime('%H:%M')
+                            response_message += f"\n- {start_time_str}: {event['summary']}"
+
+                    send_whatsapp_message(sender_phone, response_message)
+
                 else:
-                    error_message = "מצטער, לא הצלחתי להבין את התאריך והשעה."
-                    send_whatsapp_message(sender_phone, error_message)
+                    # --- לוגיקה קיימת: יצירת אירוע חדש ---
+                    print("User intent: Create event")
+                    result = parse_datetime_and_title(message_text)
+                    if result:
+                        start_datetime, event_title = result
+                        end_datetime = start_datetime + timedelta(hours=1)
+                        event_link = create_event_for_user(user_token, event_title, start_datetime.isoformat(), end_datetime.isoformat())
+                        confirmation_message = f"בסדר, קבעתי!\nאירוע: {event_title}\nבתאריך: {start_datetime.strftime('%d/%m/%Y')} בשעה {start_datetime.strftime('%H:%M')}\n\nקישור: {event_link}"
+                        send_whatsapp_message(sender_phone, confirmation_message)
+                    else:
+                        error_message = "מצטער, לא הצלחתי להבין את התאריך והשעה."
+                        send_whatsapp_message(sender_phone, error_message)
             else:
+                # לוגיקת משתמש חדש (נשארת זהה)
                 print(f"New user: {sender_phone}. Sending registration link.")
                 registration_link = url_for('register', wa_id=sender_phone, _external=True)
                 message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
                 send_whatsapp_message(sender_phone, message)
-    
-    return 'OK', 200
+
+        return 'OK', 200
+    return 'Unsupported method', 405
 
 # --- נתיב לאיפוס בסיס הנתונים ---
 @app.route('/reset-database-for-testing')
@@ -219,3 +253,42 @@ def reset_database():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
+
+def get_events_for_day(user_refresh_token, target_date):
+    """
+    שולף את כל האירועים ליום מסוים מהיומן של המשתמש.
+    target_date: אובייקט datetime.date
+    """
+    try:
+        with open(CLIENT_SECRET_FILE) as f:
+            client_secrets = json.load(f)['web'] # או 'installed', תלוי בסוג המפתח שלך
+
+        creds = Credentials.from_authorized_user_info(
+            info={
+                'refresh_token': user_refresh_token,
+                'client_id': client_secrets['client_id'],
+                'client_secret': client_secrets['client_secret']
+            },
+            scopes=SCOPES
+        )
+
+        service = build('calendar', 'v3', credentials=creds)
+
+        start_of_day = datetime.combine(target_date, time.min).isoformat() + 'Z'
+        end_of_day = datetime.combine(target_date, time.max).isoformat() + 'Z'
+
+        events_result = service.events().list(
+            calendarId='primary', 
+            timeMin=start_of_day,
+            timeMax=end_of_day, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+
+        events = events_result.get('items', [])
+        return events
+
+    except Exception as e:
+        print(f"An error occurred in get_events_for_day: {e}")
+        return None
