@@ -29,5 +29,5 @@ steps:
     - '--quiet'
   id: 'Deploy'
 
-  options:
-    logging: CLOUD_LOGGING_ONLY
+options:
+  logging: CLOUD_LOGGING_ONLY
