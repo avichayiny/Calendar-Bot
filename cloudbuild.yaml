@@ -28,3 +28,6 @@ steps:
     - 'europe-west1'
     - '--quiet'
   id: 'Deploy'
+
+  options:
+    logging: CLOUD_LOGGING_ONLY
