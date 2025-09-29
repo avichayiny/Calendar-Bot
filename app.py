@@ -251,7 +251,7 @@ def webhook():
                             else:
                                 response_message = "אירעה שגיאה במחיקת האירוע."
                         else:
-                            response_message = "מצטער, לא מצאתי אירוע שתואם לתיאור שלך."
+                            response_message = "מצטער, לא מצאתי אירוע שתואם לתיאור שלך,."
                     else:
                         response_message = "לא הבנתי איזה אירוע למחוק. נסה לציין תאריך ומילת מפתח מהכותרת."
                     
