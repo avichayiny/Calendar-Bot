@@ -1,0 +1,30 @@
+steps:
+# שלב 1: בנה את "קופסת הקוד" (Docker Image)
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-t'
+    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+    - '.'
+  id: 'Build'
+
+# שלב 2: העלה את הקופסה למחסן
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'push'
+    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+  id: 'Push'
+
+# שלב 3: פרוס את הגרסה החדשה ל-Cloud Run
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: 'gcloud'
+  args:
+    - 'run'
+    - 'deploy'
+    - 'whatsapp-bot-service' # <-- ודא שזהו שם השירות שלך ב-Cloud Run
+    - '--image'
+    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+    - '--region'
+    - 'europe-west1'
+    - '--quiet'
+  id: 'Deploy'

@@ -1,31 +1,26 @@
-# database_setup.py
+import os
+import psycopg2
+from dotenv import load_dotenv
 
-import sqlite3
+load_dotenv()
+# חשוב: ודא שמשתנה הסביבה DATABASE_URL מוגדר גם בקובץ ה-.env המקומי שלך
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-# שם קובץ בסיס הנתונים
-DB_FILE = "bot_database.db"
-
-# מתחברים לבסיס הנתונים (אם הקובץ לא קיים, הוא ייווצר)
-conn = sqlite3.connect(DB_FILE)
-print("Database file created or connected successfully.")
-
-# יוצרים "סמן" שדרכו נבצע פקודות
+conn = psycopg2.connect(DATABASE_URL)
+print("Connected to PostgreSQL database.")
 cursor = conn.cursor()
 
-# --- יצירת טבלת המשתמשים ---
-# הפקודה הזו תבוצע רק אם הטבלה לא קיימת עדיין
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     whatsapp_id TEXT PRIMARY KEY,
     google_refresh_token TEXT NOT NULL,
     user_name TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 )
 ''')
 print("'users' table created or already exists.")
 
-# שמירת השינויים וסגירת החיבור
 conn.commit()
+cursor.close()
 conn.close()
-
 print("Database setup is complete.")

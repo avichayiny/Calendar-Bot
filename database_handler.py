@@ -1,38 +1,41 @@
-# database_handler.py
+import os
+import psycopg2
 
-import sqlite3
-
-DB_FILE = "bot_database.db"
+# נקרא את כתובת בסיס הנתונים ממשתני הסביבה
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 def add_user(whatsapp_id, refresh_token, user_name):
-    """מוסיף משתמש חדש או מעדכן משתמש קיים בבסיס הנתונים."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     
-    # הפקודה "REPLACE" תעדכן את הרשומה אם ה-whatsapp_id כבר קיים, או תיצור חדשה אם לא.
+    # הפקודה ב-PostgreSQL מעט שונה, היא בטוחה יותר ומונעת כפילויות
     cursor.execute(
-        "REPLACE INTO users (whatsapp_id, google_refresh_token, user_name) VALUES (?, ?, ?)",
+        """
+        INSERT INTO users (whatsapp_id, google_refresh_token, user_name) 
+        VALUES (%s, %s, %s)
+        ON CONFLICT (whatsapp_id) 
+        DO UPDATE SET google_refresh_token = EXCLUDED.google_refresh_token, user_name = EXCLUDED.user_name;
+        """,
         (whatsapp_id, refresh_token, user_name)
     )
     
     conn.commit()
+    cursor.close()
     conn.close()
-    print(f"User {whatsapp_id} ({user_name}) was added/updated in the database.")
+    print(f"User {whatsapp_id} ({user_name}) was added/updated in the PostgreSQL database.")
 
 def get_user_token(whatsapp_id):
-    """מחזיר את ה-refresh_token של משתמש ספציפי."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = psycopg2.connect(DATABASE_URL)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT google_refresh_token FROM users WHERE whatsapp_id = ?", (whatsapp_id,))
+    cursor.execute("SELECT google_refresh_token FROM users WHERE whatsapp_id = %s", (whatsapp_id,))
     
-    # fetchone() יחזיר None אם המשתמש לא נמצא
     result = cursor.fetchone() 
     
+    cursor.close()
     conn.close()
     
     if result:
-        # התוצאה היא tuple, אנחנו רוצים את הפריט הראשון
         return result[0] 
     else:
         return None
