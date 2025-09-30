@@ -16,7 +16,7 @@ from google_calendar_handler import create_event_for_user, get_events_for_day, d
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-# --- טעינת משתני הסביבה (מותאם למטא) ---
+# -- טעינת משתני הסביבה (מותאם למטא) --
 load_dotenv()
 APP_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
 APP_ACCESS_TOKEN = os.getenv('META_ACCESS_TOKEN')
