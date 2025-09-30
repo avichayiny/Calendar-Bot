@@ -4,7 +4,7 @@ steps:
   args:
     - 'build'
     - '-t'
-    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+    - 'me-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
     - '.'
   id: 'Build'
 
@@ -12,7 +12,7 @@ steps:
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - 'push'
-    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+    - 'me-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
   id: 'Push'
 
 # שלב 3: פרוס את הגרסה החדשה ל-Cloud Run
@@ -21,13 +21,14 @@ steps:
   args:
     - 'run'
     - 'deploy'
-    - 'whatsapp-bot-service' # <-- ודא שזהו שם השירות שלך ב-Cloud Run
+    - 'whatsapp-bot-service' # ודא שזהו שם השירות שלך ב-Cloud Run
     - '--image'
-    - 'europe-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
+    - 'me-west1-docker.pkg.dev/whatsapp-calendar-bot-468708/whatsapp-bot-repo/calendar-bot:latest'
     - '--region'
-    - 'europe-west1'
+    - 'me-west1' # <-- כאן התיקון!
     - '--quiet'
   id: 'Deploy'
 
 options:
   logging: CLOUD_LOGGING_ONLY
+
