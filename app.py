@@ -30,20 +30,41 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-# --- [שדרוג] פונקציות עזר מותאמות למטא ---
+# --- [שדרוג] פונקציות עזר מותאמות למטא (עם דיבאג) ---
 def parse_whatsapp_message(data):
     """מנתח את מבנה ההודעה הנכנסת מה-API של מטא."""
+    # הדפסת כל המידע שמגיע ממטא כדי שנוכל לראות אותו
+    print("--- RAW DATA FROM META ---")
+    print(json.dumps(data, indent=2))
+    print("--------------------------")
+    
     try:
         entry = data['entry'][0]
         changes = entry['changes'][0]
         value = changes['value']
+        
+        # בדיקה אם ההודעה מכילה סטטוס או הודעה אמיתית
+        if 'messages' not in value:
+            print("Webhook received a status update or other event, not a user message. Skipping.")
+            return None, None
+            
         message_object = value['messages'][0]
         
+        # בדיקה שזו הודעת טקסט ולא משהו אחר
+        if 'text' not in message_object:
+            print("Webhook received a non-text message (e.g., image, sticker). Skipping.")
+            return None, None
+
         message_text = message_object['text']['body']
-        sender_phone_number = message_object['from'] # מספר השולח במטא
+        # שינוי קטן כדי לקחת את המספר מהמקום הנכון והאמין ביותר
+        sender_phone_number = value['contacts'][0]['wa_id']
         
+        print(f"Successfully parsed message from {sender_phone_number}")
         return sender_phone_number, message_text
-    except (KeyError, IndexError):
+        
+    except (KeyError, IndexError) as e:
+        # אם יש שגיאה, נדפיס אותה במקום להיכשל בשקט
+        print(f"!!! FAILED TO PARSE MESSAGE. Error: {e} !!!")
         return None, None
 
 def send_whatsapp_message(to_phone_number, message):
