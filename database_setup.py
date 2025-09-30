@@ -2,25 +2,24 @@ import os
 import psycopg2
 from dotenv import load_dotenv
 
-# טען את משתני הסביבה כדי שנוכל להשתמש בהם
+# טען את משתני הסביבה
 load_dotenv()
 DB_USER = os.getenv('DB_USER')
 DB_PASS = os.getenv('DB_PASS')
 DB_NAME = os.getenv('DB_NAME')
-INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME')
+DB_HOST = os.getenv('DB_HOST') # <-- משתנה חדש עם כתובת ה-IP
 
 def setup():
     conn = None
     try:
-        # בתוך סביבת Cloud Run/Build, נתיב ה-socket נוצר אוטומטית
-        unix_socket_path = f"/cloudsql/{INSTANCE_CONNECTION_NAME}"
+        # חיבור דרך כתובת IP פומבית - מיועד רק לשלב הבנייה
         conn = psycopg2.connect(
-            host=unix_socket_path,
+            host=DB_HOST,
             dbname=DB_NAME,
             user=DB_USER,
             password=DB_PASS
         )
-        print("Connected to PostgreSQL database successfully.")
+        print("Connected to PostgreSQL via Public IP for setup.")
         
         with conn.cursor() as cursor:
             cursor.execute('''
@@ -44,3 +43,4 @@ def setup():
 
 if __name__ == '__main__':
     setup()
+
