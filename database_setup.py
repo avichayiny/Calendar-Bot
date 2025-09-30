@@ -2,25 +2,45 @@ import os
 import psycopg2
 from dotenv import load_dotenv
 
+# טען את משתני הסביבה כדי שנוכל להשתמש בהם
 load_dotenv()
-# חשוב: ודא שמשתנה הסביבה DATABASE_URL מוגדר גם בקובץ ה-.env המקומי שלך
-DATABASE_URL = os.getenv('DATABASE_URL')
+DB_USER = os.getenv('DB_USER')
+DB_PASS = os.getenv('DB_PASS')
+DB_NAME = os.getenv('DB_NAME')
+INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME')
 
-conn = psycopg2.connect(DATABASE_URL)
-print("Connected to PostgreSQL database.")
-cursor = conn.cursor()
+def setup():
+    conn = None
+    try:
+        # בתוך סביבת Cloud Run/Build, נתיב ה-socket נוצר אוטומטית
+        unix_socket_path = f"/cloudsql/{INSTANCE_CONNECTION_NAME}"
+        conn = psycopg2.connect(
+            host=unix_socket_path,
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASS
+        )
+        print("Connected to PostgreSQL database successfully.")
+        
+        with conn.cursor() as cursor:
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                whatsapp_id TEXT PRIMARY KEY,
+                google_refresh_token TEXT NOT NULL,
+                user_name TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+            print("'users' table created or already exists.")
+        
+        conn.commit()
 
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS users (
-    whatsapp_id TEXT PRIMARY KEY,
-    google_refresh_token TEXT NOT NULL,
-    user_name TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-)
-''')
-print("'users' table created or already exists.")
+    except Exception as e:
+        print(f"An error occurred during database setup: {e}")
+    finally:
+        if conn:
+            conn.close()
+            print("Database connection closed.")
 
-conn.commit()
-cursor.close()
-conn.close()
-print("Database setup is complete.")
+if __name__ == '__main__':
+    setup()
