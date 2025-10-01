@@ -62,7 +62,7 @@ def parse_whatsapp_message(data):
         print(f"Successfully parsed message from {sender_phone_number}")
         return sender_phone_number, message_text
         
-    except (KeyError, IndexError) as e:
+    except (KeyError, IndexError, TypeError) as e:
         # אם יש שגיאה, נדפיס אותה במקום להיכשל בשקט
         print(f"!!! FAILED TO PARSE MESSAGE. Error: {e} !!!")
         return None, None
