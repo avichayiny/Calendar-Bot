@@ -33,6 +33,12 @@ app = Flask(__name__)
 print("--- FLASK APP INITIALIZED ---")
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
+# --- [התוספת שלנו] נתיב לבדיקת בריאות ---
+@app.route('/')
+def health_check():
+    """נתיב פשוט ש-Cloud Run יכול לבדוק כדי לוודא שהשירות חי."""
+    return "OK", 200
+
 # --- [שדרוג] פונקציות עזר מותאמות למטא (עם דיבאג) ---
 def parse_whatsapp_message(data):
     """מנתח את מבנה ההודעה הנכנסת מה-API של מטא."""
