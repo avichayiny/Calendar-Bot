@@ -16,6 +16,8 @@ from google_calendar_handler import create_event_for_user, get_events_for_day, d
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
+print("--- app.py SCRIPT STARTED, IMPORTS OK ---")
+
 # -- טעינת משתני הסביבה (מותאם למטא) --
 load_dotenv()
 APP_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
@@ -28,6 +30,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 
 # --- אתחול השרת ---
 app = Flask(__name__)
+print("--- FLASK APP INITIALIZED ---")
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
 # --- [שדרוג] פונקציות עזר מותאמות למטא (עם דיבאג) ---
