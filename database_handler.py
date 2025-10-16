@@ -1,27 +1,28 @@
+# database_handler.py (גרסה מתוקנת לחיבור ציבורי)
 import os
 import psycopg2
 
-# --- [שדרוג] קריאת פרטי החיבור המאובטח ממשתני הסביבה ---
+# קריאת פרטי החיבור הציבורי ממשתני הסביבה
 DB_USER = os.getenv('DB_USER')
 DB_PASS = os.getenv('DB_PASS')
 DB_NAME = os.getenv('DB_NAME')
-INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME') # שם החיבור המיוחד מ-Cloud SQL
+DB_HOST = os.getenv('DB_HOST') # <-- המשתנה החשוב לחיבור הציבורי
 
 def get_connection():
-    """יוצר ופותח חיבור מאובטח לבסיס הנתונים."""
+    """יוצר ופותח חיבור לבסיס הנתונים דרך IP פומבי."""
     try:
-        # בתוך סביבת Cloud Run, נתיב ה-socket נוצר אוטומטית
-        unix_socket_path = f"/cloudsql/{INSTANCE_CONNECTION_NAME}"
         conn = psycopg2.connect(
-            host=unix_socket_path,
+            host=DB_HOST,
             dbname=DB_NAME,
             user=DB_USER,
             password=DB_PASS
         )
         return conn
     except Exception as e:
-        print(f"Error connecting to the database: {e}")
+        print(f"Error connecting to the database via public IP: {e}")
         return None
+
+# --- שאר הפונקציות נשארות זהות לחלוטין ---
 
 def add_user(whatsapp_id, refresh_token, user_name):
     conn = get_connection()
