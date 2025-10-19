@@ -175,7 +175,7 @@ def start_auth():
     session['whatsapp_id'] = request.args.get('wa_id')
     # --- [התוספת שלנו] ---
     generated_redirect_uri = url_for('oauth2callback', _external=True)
-    print(f"--- GENERATED REDIRECT URI: '{generated_redirect_uri}' ---")
+    print(f"--- GENERATED REDIRECT URI: '{generated_redirect_uri}' ----")
     # -------------------------
 
     flow = Flow.from_client_config(
