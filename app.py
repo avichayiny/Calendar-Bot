@@ -15,6 +15,7 @@ from google_calendar_handler import create_event_for_user, get_events_for_day, d
 # --- ייבואים לתהליך האימות של גוגל ---
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 print("--- app.py SCRIPT STARTED, IMPORTS OK ---")
 
@@ -30,6 +31,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 
 # --- אתחול השרת ---
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 print("--- FLASK APP INITIALIZED ---")
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
