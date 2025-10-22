@@ -1,6 +1,4 @@
-WhatsApp Bot for Google Calendar Management
-
-An end-to-end project developing and deploying a chatbot that translates natural language (Hebrew) into Google Calendar actions, utilizing a range of cloud technologies.
+Developed and deployed an end-to-end chatbot that translates natural language (Hebrew) into Google Calendar actions. This independent project was initiated for self-learning to gain practical experience with cloud technologies (GCP), API integration, and CI/CD pipelines.
 
 Functionality:
 
