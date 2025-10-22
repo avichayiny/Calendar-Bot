@@ -1,5 +1,5 @@
 steps:
-  # שלב 1: התקן ספריות והקם את בסיס הנתונים
+  # Step 1: Install libraries and set up the database
   - name: 'python:3.11-slim'
     entrypoint: 'bash'
     args:
@@ -7,7 +7,7 @@ steps:
       - |
         pip install -r requirements.txt
         python database_setup.py
-    # העבר את משתני הסביבה לשלב הזה
+    # Pass environment variables to this step
     env:
       - 'DB_USER=${_DB_USER}'
       - 'DB_PASS=${_DB_PASS}'
@@ -15,7 +15,7 @@ steps:
       - 'DB_HOST=${_DB_HOST}'
     id: 'Setup'
 
-  # שלב 2: בנה את "קופסת הקוד"
+  # Step 2: Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -24,14 +24,14 @@ steps:
       - '.'
     id: 'Build'
 
-  # שלב 3: העלה את הקופסה למחסן
+  # Step 3: Push the image to the repository
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'me-west1-docker.pkg.dev/$PROJECT_ID/whatsapp-bot-repo/calendar-bot:latest'
     id: 'Push'
 
-  # שלב 4: פרוס את הגרסה החדשה ל-Cloud Run
+  # Step 4: Deploy the new version to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
     args:
@@ -49,7 +49,6 @@ steps:
       - "DB_HOST=${_DB_HOST},DB_USER=${_DB_USER},DB_PASS=${_DB_PASS},DB_NAME=${_DB_NAME},META_VERIFY_TOKEN=${_META_VERIFY_TOKEN},META_ACCESS_TOKEN=${_META_ACCESS_TOKEN},META_PHONE_NUMBER_ID=${_META_PHONE_NUMBER_ID},GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${_GOOGLE_CLIENT_SECRET},FLASK_SECRET_KEY=${_FLASK_SECRET_KEY}"
     id: 'Deploy'
 
-# הגדרות כלליות
+# General options
 options:
   logging: CLOUD_LOGGING_ONLY
-

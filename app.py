@@ -1,4 +1,4 @@
-# app.py (גרסה 22.0 - הגרסה המאוחדת והסופית עבור מטא)
+# app.py (Version 22.0 - Final unified version for Meta)
 
 import os
 import json
@@ -8,18 +8,18 @@ from flask import Flask, request, redirect, session, url_for
 from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 
-# --- ייבואים מהקבצים שלנו ---
+# --- Imports from our files ---
 from database_handler import add_user, get_user_token
 from google_calendar_handler import create_event_for_user, get_events_for_day, delete_event
 
-# --- ייבואים לתהליך האימות של גוגל ---
+# --- Imports for the Google authentication process ---
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-print("--- app.py SCRIPT STARTED, IMPORTS OK ---")
+#print("--- app.py SCRIPT STARTED, IMPORTS OK ---")
 
-# -- טעינת משתני הסביבה (מותאם למטא) --
+# -- Load environment variables (for Meta) --
 load_dotenv()
 APP_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
 APP_ACCESS_TOKEN = os.getenv('META_ACCESS_TOKEN')
@@ -29,57 +29,56 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
-# --- אתחול השרת ---
+# --- Initialize the server ---
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
-print("--- FLASK APP INITIALIZED ---")
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-# --- [התוספת שלנו] נתיב לבדיקת בריאות ---
+# --- [Our addition] Health check endpoint ---
 @app.route('/')
 def health_check():
-    """נתיב פשוט ש-Cloud Run יכול לבדוק כדי לוודא שהשירות חי."""
+    """A simple endpoint that Cloud Run can probe to verify the service is live."""
     return "OK", 200
 
-# --- [שדרוג] פונקציות עזר מותאמות למטא (עם דיבאג) ---
+# --- [Upgrade] Meta-compatible helper functions (with debug) ---
 def parse_whatsapp_message(data):
-    """מנתח את מבנה ההודעה הנכנסת מה-API של מטא."""
-    # הדפסת כל המידע שמגיע ממטא כדי שנוכל לראות אותו
-    print("--- RAW DATA FROM META ---")
-    print(json.dumps(data, indent=2))
-    print("--------------------------")
+    """Parses the incoming message structure from the Meta API."""
+    # Print all the data coming from Meta so we can see it
+    #print("--- RAW DATA FROM META ---")
+    #print(json.dumps(data, indent=2))
+    #print("--------------------------")
     
     try:
         entry = data['entry'][0]
         changes = entry['changes'][0]
         value = changes['value']
         
-        # בדיקה אם ההודעה מכילה סטטוס או הודעה אמיתית
+        # Check if the payload contains a status update or a real message
         if 'messages' not in value:
             print("Webhook received a status update or other event, not a user message. Skipping.")
             return None, None
             
         message_object = value['messages'][0]
         
-        # בדיקה שזו הודעת טקסט ולא משהו אחר
+        # Check that this is a text message and not something else
         if 'text' not in message_object:
             print("Webhook received a non-text message (e.g., image, sticker). Skipping.")
             return None, None
 
         message_text = message_object['text']['body']
-        # שינוי קטן כדי לקחת את המספר מהמקום הנכון והאמין ביותר
+        # A small change to get the number from the most reliable source
         sender_phone_number = value['contacts'][0]['wa_id']
         
         print(f"Successfully parsed message from {sender_phone_number}")
         return sender_phone_number, message_text
         
     except (KeyError, IndexError, TypeError) as e:
-        # אם יש שגיאה, נדפיס אותה במקום להיכשל בשקט
+        # If there's an error, print it instead of failing silently
         print(f"!!! FAILED TO PARSE MESSAGE. Error: {e} !!!")
         return None, None
 
 def send_whatsapp_message(to_phone_number, message):
-    """שולח הודעת וואטסאפ דרך ה-API של מטא."""
+    """Sends a WhatsApp message via the Meta API."""
     headers = {
         "Authorization": f"Bearer {APP_ACCESS_TOKEN}",
         "Content-Type": "application/json",
@@ -94,7 +93,7 @@ def send_whatsapp_message(to_phone_number, message):
     except requests.exceptions.RequestException as e:
         print(f"Error sending WhatsApp message: {e}")
 
-# --- מנוע פיענוח (הגרסה היציבה שלנו - ללא שינוי) ---
+# --- Parsing engine (our stable version - no changes) ---
 def parse_datetime_and_title(text):
     now = datetime.now()
     original_text = text
@@ -147,8 +146,8 @@ def parse_datetime_and_title(text):
     stop_words = ['בבוקר', 'בערב', 'בצהריים', 'בלילה', 'ביום']
     for word in stop_words: event_title = event_title.replace(word, '')
 
-    # --- [התיקון המקומי] ---
-    # נוסיף לולאה שתנקה את מילות הפקודה של המחיקה מהכותרת
+    # --- [Local fix] ---
+    # Add a loop to clean the delete command words from the title
     delete_keywords = ['מחק', 'בטל', 'הסר']
     for word in delete_keywords:
         event_title = event_title.replace(word, '')
@@ -158,10 +157,9 @@ def parse_datetime_and_title(text):
     if not event_title: event_title = "אירוע ללא כותרת"
     return final_datetime, event_title
 
-# --- עמודי האינטרנט לתהליך ההרשמה (ללא שינוי) ---
+# --- Web pages for the registration process (no changes) ---
 @app.route('/register')
 def register():
-    # ... תוכן הפונקציה נשאר זהה ...
     wa_id = request.args.get('wa_id')
     if not wa_id: return "<h1>שגיאה: מספר וואטסאפ חסר.</h1>", 400
     auth_link = url_for('start_auth', wa_id=wa_id, _external=True)
@@ -173,9 +171,8 @@ def register():
 
 @app.route('/start-auth')
 def start_auth():
-    # ... תוכן הפונקציה נשאר זהה ...
     session['whatsapp_id'] = request.args.get('wa_id')
-    # --- [התוספת שלנו] ---
+    # --- [Our addition] ---
     generated_redirect_uri = url_for('oauth2callback', _external=True)
     print(f"--- GENERATED REDIRECT URI: '{generated_redirect_uri}' ----")
     # -------------------------
@@ -190,7 +187,6 @@ def start_auth():
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    # ... תוכן הפונקציה נשאר זהה ...
     state = session['state']
     flow = Flow.from_client_config(
         client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
@@ -211,7 +207,7 @@ def oauth2callback():
         print(f"Error in oauth2callback: {e}")
         return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
 
-# --- Webhook ראשי עם זיהוי כוונות משולש (מתוקן) ---
+# --- Main Webhook with triple intent detection (fixed) ---
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
     if request.method == 'GET':
@@ -237,7 +233,7 @@ def webhook():
                 is_delete = any(keyword in message_text for keyword in delete_keywords)
 
                 if is_query:
-                    # --- לוגיקה קיימת: טיפול בשאילתה ---
+                    # --- Existing logic: Handle query ---
                     print("User intent: Query calendar")
                     result = parse_datetime_and_title(message_text)
                     target_datetime = result[0] if result else datetime.now()
@@ -258,7 +254,7 @@ def webhook():
                     send_whatsapp_message(sender_phone, response_message)
 
                 elif is_delete:
-                    # --- לוגיקה מתוקנת: טיפול בבקשת מחיקה ---
+                    # --- Fixed logic: Handle delete request ---
                     print("User intent: Delete event")
                     result = parse_datetime_and_title(message_text)
                     
@@ -271,7 +267,7 @@ def webhook():
                             for event in events:
                                 start = event['start'].get('dateTime', event['start'].get('date'))
                                 start_time_obj_aware = datetime.fromisoformat(start.replace('Z', '+00:00'))
-                                # <-- [התיקון] הופכים את הזמן ל"לא מודע" לפני ההשוואה
+                                # <-- [The Fix] Making the time "naive" before comparison
                                 start_time_obj_naive = start_time_obj_aware.replace(tzinfo=None)
                                 
                                 time_difference = abs((start_time_obj_naive - target_datetime).total_seconds())
@@ -295,7 +291,7 @@ def webhook():
                     send_whatsapp_message(sender_phone, response_message)
 
                 else:
-                    # --- לוגיקה קיימת: יצירת אירוע חדש ---
+                    # --- Existing logic: Create new event ---
                     print("User intent: Create event")
                     result = parse_datetime_and_title(message_text)
                     if result:
@@ -308,7 +304,7 @@ def webhook():
                         error_message = "מצטער, לא הצלחתי להבין את התאריך והשעה."
                         send_whatsapp_message(sender_phone, error_message)
             else:
-                # לוגיקת משתמש חדש (נשארת זהה)
+                # New user logic (remains the same)
                 print(f"New user: {sender_phone}. Sending registration link.")
                 registration_link = url_for('register', wa_id=sender_phone, _external=True)
                 message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
@@ -317,7 +313,7 @@ def webhook():
             return 'OK', 200
         return 'Unsupported method', 405
 
-# --- נתיב לאיפוס בסיס הנתונים ---
+# --- Route for resetting the database ---
 @app.route('/reset-database-for-testing')
 def reset_database():
     db_file = "bot_database.db"
@@ -332,5 +328,3 @@ def reset_database():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
-
-

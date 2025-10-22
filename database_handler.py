@@ -1,15 +1,15 @@
-# database_handler.py (גרסה מתוקנת לחיבור ציבורי)
+# database_handler.py (Modified version for public IP connection)
 import os
 import psycopg2
 
-# קריאת פרטי החיבור הציבורי ממשתני הסביבה
+# Load public connection details from environment variables
 DB_USER = os.getenv('DB_USER')
 DB_PASS = os.getenv('DB_PASS')
 DB_NAME = os.getenv('DB_NAME')
-DB_HOST = os.getenv('DB_HOST') # <-- המשתנה החשוב לחיבור הציבורי
+DB_HOST = os.getenv('DB_HOST') # <-- The important variable for public connection
 
 def get_connection():
-    """יוצר ופותח חיבור לבסיס הנתונים דרך IP פומבי."""
+    """Creates and opens a connection to the database via public IP."""
     try:
         conn = psycopg2.connect(
             host=DB_HOST,
@@ -22,7 +22,7 @@ def get_connection():
         print(f"Error connecting to the database via public IP: {e}")
         return None
 
-# --- שאר הפונקציות נשארות זהות לחלוטין ---
+# --- The rest of the functions remain identical ---
 
 def add_user(whatsapp_id, refresh_token, user_name):
     conn = get_connection()

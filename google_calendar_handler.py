@@ -1,12 +1,12 @@
-# google_calendar_handler.py (גרסה 20.0 - הגרסה הסופית והמאובטחת עבור Render)
+# google_calendar_handler.py
 
 import os
 import json
 from datetime import datetime, time
-from google.oauth2.credentials import Credentials # <-- ייבוא הכרחי
+from google.oauth2.credentials import Credentials # <-- Necessary import
 from googleapiclient.discovery import build
 
-# --- הגדרות שנקראות ממשתני הסביבה ב-Render ---
+# --- Settings read from environment variables ---
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
@@ -14,10 +14,10 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
 def create_event_for_user(user_refresh_token, summary, start_time, end_time):
     """
-    יוצר אירוע ביומן עבור משתמש ספציפי באמצעות ה-refresh_token שלו.
+    Creates a calendar event for a specific user using their refresh_token.
     """
     try:
-        # יוצרים את אובייקט ההרשאות עם כל המידע הנדרש ממשתני הסביבה
+        # Create the credentials object with all the required info from environment variables
         creds = Credentials.from_authorized_user_info(
             info={
                 'refresh_token': user_refresh_token,
@@ -46,10 +46,10 @@ def create_event_for_user(user_refresh_token, summary, start_time, end_time):
 
 def get_events_for_day(user_refresh_token, target_date):
     """
-    שולף את כל האירועים ליום מסוים מהיומן של המשתמש.
+    Fetches all events for a specific day from the user's calendar.
     """
     try:
-        # קוד האימות זהה - שימוש במשתני הסביבה
+        # Authentication code is the same - use environment variables
         creds = Credentials.from_authorized_user_info(
             info={
                 'refresh_token': user_refresh_token,
@@ -84,10 +84,10 @@ def get_events_for_day(user_refresh_token, target_date):
 
 def delete_event(user_refresh_token, event_id):
     """
-    מוחק אירוע ספציפי מהיומן של המשתמש לפי ה-ID שלו.
+    Deletes a specific event from the user's calendar by its ID.
     """
     try:
-        # קוד האימות זהה לפונקציות הקודמות
+        # Authentication code is the same as previous functions
         creds = Credentials.from_authorized_user_info(
             info={
                 'refresh_token': user_refresh_token,
@@ -99,15 +99,15 @@ def delete_event(user_refresh_token, event_id):
 
         service = build('calendar', 'v3', credentials=creds)
 
-        # קריאה ל-API של גוגל כדי למחוק את האירוע
+        # Call the Google API to delete the event
         service.events().delete(
             calendarId='primary', 
             eventId=event_id
         ).execute()
 
         print(f"Successfully deleted event with ID: {event_id}")
-        return True # החזר True בהצלחה
+        return True # Return True on success
 
     except Exception as e:
         print(f"An error occurred in delete_event: {e}")
-        return False # החזר False בכישלון
+        return False # Return False on failure

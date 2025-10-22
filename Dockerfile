@@ -1,24 +1,24 @@
 # Dockerfile
 
-# --- שלב 1: התחל מתמונת בסיס רשמית של פייתון ---
-# אנחנו משתמשים בגרסה "רזה" (slim) כדי שהקופסה שלנו תהיה קטנה ויעילה
+# --- Step 1: Start from an official Python base image ---
+# We use the "slim" version so our image will be small and efficient
 FROM python:3.11-slim
 
-# --- שלב 2: הגדר את סביבת העבודה בתוך הקופסה ---
-# כל הפקודות הבאות ירוצו בתוך תיקייה בשם /app
+# --- Step 2: Set the working directory inside the container ---
+# All subsequent commands will run inside a folder named /app
 WORKDIR /app
 
-# --- שלב 3: העתק את רשימת הקניות והתקן את הספריות ---
-# העתקת הקובץ הזה בנפרד מנצלת את מנגנון הזיכרון של דוקר ומזרזת בניות עתידיות
+# --- Step 3: Copy the requirements file and install dependencies ---
+# Copying this file separately leverages Docker's caching mechanism and speeds up future builds
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# --- שלב 4: העתק את כל שאר קבצי הפרויקט ---
-# הנקודה הראשונה מסמלת "כל הקבצים בתיקייה הנוכחית במחשב שלי"
-# הנקודה השנייה מסמלת "התיקייה הנוכחית בתוך הקופסה" (/app)
+# --- Step 4: Copy the rest of the project files ---
+# The first dot means "all files in the current directory on my machine"
+# The second dot means "the current directory inside the container" (/app)
 COPY . .
 
-# --- שלב 5: הגדר את הפקודה שתפעיל את השרת ---
-# הפקודה הזו תרוץ אוטומטית כשגוגל יפעיל את הקופסה שלנו
-# היא מפעילה את שרת gunicorn ומאזינה לבקשות מכל מקום על פורט 8080
+# --- Step 5: Define the command that will start the server ---
+# This command will run automatically when Google starts our container
+# It runs the gunicorn server and listens for requests from anywhere on port 8080
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--log-level", "debug", "app:app"]

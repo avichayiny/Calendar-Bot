@@ -2,17 +2,17 @@ import os
 import psycopg2
 from dotenv import load_dotenv
 
-# טען את משתני הסביבה
+# Load environment variables
 load_dotenv()
 DB_USER = os.getenv('DB_USER')
 DB_PASS = os.getenv('DB_PASS')
 DB_NAME = os.getenv('DB_NAME')
-DB_HOST = os.getenv('DB_HOST') # <-- משתנה חדש עם כתובת ה-IP
+DB_HOST = os.getenv('DB_HOST') # <-- New variable with the IP address
 
 def setup():
     conn = None
     try:
-        # חיבור דרך כתובת IP פומבית - מיועד רק לשלב הבנייה
+        # Connect via public IP address - intended only for the build step
         conn = psycopg2.connect(
             host=DB_HOST,
             dbname=DB_NAME,
@@ -43,4 +43,3 @@ def setup():
 
 if __name__ == '__main__':
     setup()
-
