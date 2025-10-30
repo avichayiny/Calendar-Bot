@@ -7,6 +7,7 @@ import requests
 from flask import Flask, request, redirect, session, url_for
 from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
+import google.generativeai as genai
 
 # --- Imports from our files ---
 from database_handler import add_user, get_user_token
@@ -28,6 +29,14 @@ GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
+
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_model = genai.GenerativeModel('gemini-1.5-pro-latest') # או 'gemini-pro'
+    print("--- GEMINI MODEL INITIALIZED ---")
+except Exception as e:
+    print(f"Error initializing Gemini: {e}")
+    gemini_model = None
 
 # --- Initialize the server ---
 app = Flask(__name__)
@@ -93,7 +102,58 @@ def send_whatsapp_message(to_phone_number, message):
     except requests.exceptions.RequestException as e:
         print(f"Error sending WhatsApp message: {e}")
 
+
+# --- [New] The Bot's Brain - LLM Based ---
+def get_intent_from_llm(message_text):
+    """
+    Sends a user message to the Gemini API and gets back a structured JSON object
+    with the intent and entities.
+    """
+    if not gemini_model:
+        print("Gemini model is not initialized. Falling back.")
+        return None
+
+    # The prompt is our instruction to the model. It's critical.
+    # The prompt's content itself remains in Hebrew, as it instructs the model
+    # on how to process Hebrew text.
+    system_prompt = f"""
+    אתה עוזר חכם לניהול יומן. התאריך והשעה הנוכחיים הם: {datetime.now().isoformat()}
+    המשתמש שלח את ההודעה הבאה בעברית: "{message_text}"
+
+    תפקידך לנתח את ההודעה ולהחזיר *אך ורק* אובייקט JSON במבנה הבא:
+    {{
+      "intent": "CREATE", "QUERY", or "DELETE",
+      "event_title": "כותרת האירוע שזוהתה (אם רלוונטי)",
+      "event_datetime": "התאריך והשעה של האירוע בפורמט ISO 8601 (אם זוהה)"
+    }}
+
+    דוגמאות:
+    - קלט: "פגישה עם רוני מחר ב-11" -> פלט: {{"intent": "CREATE", "event_title": "פגישה עם רוני", "event_datetime": "YYYY-MM-DDT11:00:00"}}
+    - קלט: "מה יש לי מחר?" -> פלט: {{"intent": "QUERY", "event_title": null, "event_datetime": "YYYY-MM-DDT00:00:00"}}
+    - קלט: "בטל את הפגישה של 11" -> פלט: {{"intent": "DELETE", "event_title": "פגישה", "event_datetime": "YYYY-MM-DDT11:00:00"}}
+    
+    חשוב:
+    1. אם לא זוהה תאריך, השתמש בתאריך של היום.
+    2. אם לא זוהתה שעה, השתמש ב-09:00 בבוקר כברירת מחדל עבור יצירה ומחיקה, ובחצות (00:00) עבור שאילתות.
+    3. אם הכוונה היא "QUERY", שים ב-event_datetime את תחילת היום המבוקש.
+    4. החזר *רק* את ה-JSON, בלי שום טקסט מסביב.
+    """
+    
+    try:
+        print("--- Sending prompt to Gemini API ---")
+        response = gemini_model.generate_content(system_prompt)
+        
+        # Clean the response to ensure we only get the JSON
+        cleaned_response = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        print(f"--- Received response from Gemini: {cleaned_response} ---")
+        return json.loads(cleaned_response)
+    except Exception as e:
+        print(f"Error calling Gemini API or parsing JSON: {e}")
+        return None
+
 # --- Parsing engine (our stable version - no changes) ---
+""""
 def parse_datetime_and_title(text):
     now = datetime.now()
     original_text = text
@@ -156,7 +216,7 @@ def parse_datetime_and_title(text):
     event_title = re.sub(r'\s+', ' ', event_title).strip()
     if not event_title: event_title = "אירוע ללא כותרת"
     return final_datetime, event_title
-
+"""""
 # --- Web pages for the registration process (no changes) ---
 @app.route('/register')
 def register():
@@ -212,6 +272,7 @@ def oauth2callback():
         print(f"Error in oauth2callback: {e}")
         return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
 
+"""
 # --- Main Webhook with triple intent detection (fixed) ---
 @app.route('/webhook', methods=['GET', 'POST'])
 def webhook():
@@ -317,6 +378,112 @@ def webhook():
             
             return 'OK', 200
         return 'Unsupported method', 405
+"""
+
+# --- [Major Upgrade] Main Webhook, now LLM-powered ---
+@app.route('/webhook', methods=['GET', 'POST'])
+def webhook():
+    if request.method == 'GET':
+        # Webhook verification logic (no changes)
+        if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.challenge"):
+            if not request.args.get("hub.verify_token") == APP_VERIFY_TOKEN: 
+                return "Verification token mismatch", 403
+            return request.args.get("hub.challenge"), 200
+        return "Hello World", 200
+
+    elif request.method == 'POST':
+        data = request.get_json()
+        sender_phone, message_text = parse_whatsapp_message(data)
+        
+        # If it's not a valid text message, just acknowledge it and exit.
+        if not (sender_phone and message_text):
+            return 'OK', 200 
+
+        user_token = get_user_token(sender_phone)
+        
+        # --- New User Logic (No Change) ---
+        if not user_token:
+            print(f"New user: {sender_phone}. Sending registration link.")
+            registration_link = url_for('register', wa_id=sender_phone, _external=True)
+            message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
+            send_whatsapp_message(sender_phone, message)
+            return 'OK', 200
+
+        # --- [NEW BRAIN] Known user logic starts here ---
+        print(f"Known user: {sender_phone}. Processing with LLM: '{message_text}'")
+        
+        action = get_intent_from_llm(message_text)
+        
+        if not action:
+            # If the LLM failed to understand or parse
+            send_whatsapp_message(sender_phone, "מצטער, לא הצלחתי להבין את הבקשה שלך. תוכל לנסח אותה קצת אחרת?")
+            return 'OK', 200
+
+        try:
+            intent = action.get("intent")
+            event_title = action.get("event_title")
+            event_datetime_str = action.get("event_datetime")
+            
+            # Check if we got the minimum required info from the LLM
+            if not (intent and event_datetime_str):
+                raise ValueError("LLM response missing intent or datetime.")
+                
+            target_datetime = datetime.fromisoformat(event_datetime_str)
+
+            # --- Execute action based on the LLM's recognized intent ---
+            
+            if intent == "CREATE":
+                print("LLM Intent: CREATE")
+                if not event_title: 
+                    event_title = "אירוע ללא כותרת" # Default title if LLM forgets
+                
+                end_datetime = target_datetime + timedelta(hours=1)
+                event_link = create_event_for_user(user_token, event_title, target_datetime.isoformat(), end_datetime.isoformat())
+                
+                # Check if event creation was successful
+                if "An error occurred" in str(event_link):
+                    confirmation_message = f"ניסיתי לקבוע אירוע, אבל נתקלתי בשגיאה: {event_link}"
+                else:
+                    confirmation_message = f"בסדר, קבעתי!\nאירוע: {event_title}\nבתאריך: {target_datetime.strftime('%d/%m/%Y')} בשעה {target_datetime.strftime('%H:%M')}\n\nקישור: {event_link}"
+                send_whatsapp_message(sender_phone, confirmation_message)
+
+            elif intent == "QUERY":
+                print("LLM Intent: QUERY")
+                events = get_events_for_day(user_token, target_datetime.date())
+                
+                if events is None:
+                    response_message = "אירעה שגיאה בבדיקת היומן שלך."
+                elif not events:
+                    response_message = f"אתה פנוי לגמרי ב-{target_datetime.strftime('%d/%m/%Y')}! אין לך אירועים ביומן."
+                else:
+                    response_message = f"הנה הלו\"ז שלך ל-{target_datetime.strftime('%d/%m/%Y')}:\n"
+                    for event in events:
+                        start = event['start'].get('dateTime', event['start'].get('date'))
+                        start_time_obj = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                        start_time_str = start_time_obj.strftime('%H:%M')
+                        response_message += f"\n- {start_time_str}: {event['summary']}"
+                send_whatsapp_message(sender_phone, response_message)
+
+            elif intent == "DELETE":
+                print("LLM Intent: DELETE")
+                # This logic is simpler for now. We can make it more complex later.
+                # For now, it just demonstrates the intent was understood.
+                # A full implementation would query events around `target_datetime`
+                # and try to match `event_title` to delete the correct one.
+                send_whatsapp_message(sender_phone, "זיהיתי שאתה רוצה למחוק אירוע. תכונה זו עדיין בפיתוח בגרסת ה-LLM.")
+
+            else:
+                send_whatsapp_message(sender_phone, "הבנתי את כוונתך, אבל אני עוד לא תומך בפעולה הזו.")
+
+        except Exception as e:
+            print(f"Error processing LLM action: {e}")
+            send_whatsapp_message(sender_phone, "מצטער, משהו השתבש בעיבוד הבקשה שלך.")
+            
+        return 'OK', 200
+
+# --- Route for resetting the database (no change) ---
+@app.route('/reset-database-for-testing')
+# ... (הקוד של הפונקציה נשאר זהה) ...
 
 # --- Route for resetting the database ---
 @app.route('/reset-database-for-testing')
