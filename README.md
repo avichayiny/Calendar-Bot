@@ -23,3 +23,10 @@ API Integrations:
 - Google Calendar API: Performed Create, Read, and Delete operations on user calendars.
 
 - Google OAuth 2.0: Managed the secure user authorization and token refresh flow.
+
+
+Here's an example video:
+
+
+https://github.com/user-attachments/assets/01373570-cbc0-455e-84c0-20ac5f429142
+
