@@ -27,6 +27,7 @@ APP_ACCESS_TOKEN = os.getenv('META_ACCESS_TOKEN')
 PHONE_NUMBER_ID = os.getenv('META_PHONE_NUMBER_ID')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
