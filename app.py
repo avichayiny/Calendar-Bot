@@ -202,6 +202,11 @@ def oauth2callback():
         user_info = user_info_service.userinfo().get().execute()
         user_name = user_info.get('name', 'User')
         add_user(whatsapp_id, refresh_token, user_name)
+        try:
+            welcome_message = f"היי {user_name}, החיבור הושלם! 🎉\n\nעכשיו היומן שלך מחובר. אתה יכול להתחיל לשלוח לי הודעות כמו:\n- 'פגישה חשובה מחר ב-10'\n- 'מה הלוז מחר?'\n- 'בטל את הפגישה של 10'"
+            send_whatsapp_message(whatsapp_id, welcome_message)
+        except Exception as e:
+            print(f"Failed to send welcome message to {whatsapp_id}: {e}")
         return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
     except Exception as e:
         print(f"Error in oauth2callback: {e}")
