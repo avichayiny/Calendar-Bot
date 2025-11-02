@@ -51,7 +51,7 @@ try:
     vertexai.init(project=PROJECT_ID, location=LOCATION)
     
     # שימוש במודל הזמין ב-Vertex AI
-    gemini_model = GenerativeModel("gemini-1.0-pro") # נשתמש ב-1.0-pro היציב
+    gemini_model = GenerativeModel("gemini-1.5-pro") # נשתמש ב-1.0-pro היציב
     print(f"--- VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---")
 except Exception as e:
     print(f"Error initializing Vertex AI: {e}")
