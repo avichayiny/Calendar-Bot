@@ -8,6 +8,8 @@ from flask import Flask, request, redirect, session, url_for
 from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 import google.generativeai as genai
+import vertexai
+from vertexai.generative_models import GenerativeModel, Part
 
 # --- Imports from our files ---
 from database_handler import add_user, get_user_token
@@ -28,10 +30,12 @@ PHONE_NUMBER_ID = os.getenv('META_PHONE_NUMBER_ID')
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT')
+LOCATION = 'us-central1'
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
-
+"""
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel('gemini-pro') # 'gemini-pro'
@@ -39,6 +43,20 @@ try:
 except Exception as e:
     print(f"Error initializing Gemini: {e}")
     gemini_model = None
+"""
+
+try:
+    # אתחול הלקוח של Vertex AI.
+    # הוא ישתמש אוטומטית בהרשאות של Cloud Run
+    vertexai.init(project=PROJECT_ID, location=LOCATION)
+    
+    # שימוש במודל הזמין ב-Vertex AI
+    gemini_model = GenerativeModel("gemini-1.0-pro") # נשתמש ב-1.0-pro היציב
+    print(f"--- VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---")
+except Exception as e:
+    print(f"Error initializing Vertex AI: {e}")
+    gemini_model = None
+
 
 # --- Initialize the server ---
 app = Flask(__name__)
@@ -106,7 +124,7 @@ def send_whatsapp_message(to_phone_number, message):
 
 
 # --- [New] The Bot's Brain - LLM Based ---
-def get_intent_from_llm(message_text):
+def get_intent_from_llm1(message_text):
     """
     Sends a user message to the Gemini API and gets back a structured JSON object
     with the intent and entities.
@@ -152,6 +170,53 @@ def get_intent_from_llm(message_text):
         return json.loads(cleaned_response)
     except Exception as e:
         print(f"Error calling Gemini API or parsing JSON: {e}")
+        return None
+
+def get_intent_from_llm(message_text):
+    """
+    Sends a user message to the Vertex AI API (in us-central1)
+    and gets back a structured JSON object.
+    """
+    if not gemini_model:
+        print("Vertex AI model is not initialized. Falling back.")
+        return None
+
+    # הפרומפט נשאר כמעט זהה, רק בלי הפניות לתאריך
+    system_prompt = f"""
+    אתה עוזר חכם לניהול יומן. התאריך והשעה הנוכחיים הם: {datetime.now().isoformat()}
+    המשתמש שלח את ההודעה הבאה בעברית: "{message_text}"
+
+    תפקידך לנתח את ההודעה ולהחזיר *אך ורק* אובייקט JSON במבנה הבא:
+    {{
+      "intent": "CREATE", "QUERY", or "DELETE",
+      "event_title": "כותרת האירוע שזוהתה (אם רלוונטי)",
+      "event_datetime": "התאריך והשעה של האירוע בפורמט ISO 8601 (אם זוהה)"
+    }}
+
+    דוגמאות:
+    - קלט: "פגישה עם רוני מחר ב-11" -> פלט: {{"intent": "CREATE", "event_title": "פגישה עם רוני", "event_datetime": "YYYY-MM-DDT11:00:00"}}
+    - קלט: "מה יש לי מחר?" -> פלט: {{"intent": "QUERY", "event_title": null, "event_datetime": "YYYY-MM-DDT00:00:00"}}
+    - קלט: "בטל את הפגישה של 11" -> פלט: {{"intent": "DELETE", "event_title": "פגישה", "event_datetime": "YYYY-MM-DDT11:00:00"}}
+    
+    חשוב:
+    1. אם לא זוהה תאריך, השתמש בתאריך של היום.
+    2. אם לא זוהתה שעה, השתמש ב-09:00 בבוקר כברירת מחדל עבור יצירה ומחיקה, ובחצות (00:00) עבור שאילתות.
+    3. אם הכוונה היא "QUERY", שים ב-event_datetime את תחילת היום המבוקש.
+    4. החזר *רק* את ה-JSON, בלי שום טקסט מסביב.
+    """
+    
+    try:
+        print("--- Sending prompt to Vertex AI API ---")
+        # קריאה ל-API בדרך החדשה
+        response = gemini_model.generate_content(system_prompt)
+        
+        # Clean the response to ensure we only get the JSON
+        cleaned_response = response.text.strip().replace("```json", "").replace("```", "").strip()
+        
+        print(f"--- Received response from Vertex AI: {cleaned_response} ---")
+        return json.loads(cleaned_response)
+    except Exception as e:
+        print(f"Error calling Vertex AI API or parsing JSON: {e}")
         return None
 
 # --- Parsing engine (our stable version - no changes) ---
