@@ -1,5 +1,5 @@
 # app.py (Version 22.0 - Final unified version for Meta)
-
+import sys
 import os
 import json
 import re
@@ -21,7 +21,8 @@ from googleapiclient.discovery import build
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 #print("--- app.py SCRIPT STARTED, IMPORTS OK ---")
-
+# (כל האימפורטים שלך צריכים להיות לפני הבלוק הזה)
+print("--- [DEBUG] 0. IMPORTS FINISHED. STARTING GLOBAL SCOPE ---", flush=True)
 # -- Load environment variables (for Meta) --
 load_dotenv()
 APP_VERIFY_TOKEN = os.getenv('META_VERIFY_TOKEN')
@@ -32,6 +33,7 @@ GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 PROJECT_ID = os.getenv('GOOGLE_CLOUD_PROJECT')
 LOCATION = 'us-central1'
+print(f"--- [DEBUG] 0.5. Got ENV VARS (Project ID is: {PROJECT_ID}) ---", flush=True)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
@@ -46,16 +48,22 @@ except Exception as e:
 """
 
 try:
-    # אתחול הלקוח של Vertex AI.
-    # הוא ישתמש אוטומטית בהרשאות של Cloud Run
+    print("--- [DEBUG] 1. Inside TRY block. About to init Vertex AI ---", flush=True)
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    
-    # שימוש במודל הזמין ב-Vertex AI
-    gemini_model = GenerativeModel("gemini-1.5-pro") # נשתמש ב-1.0-pro היציב
-    print(f"--- VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---")
+    print("--- [DEBUG] 2. vertexai.init() FINISHED ---", flush=True)
+
+    gemini_model = GenerativeModel("gemini-1.5-pro")
+    print(f"--- [SUCCESS] 3. VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---", flush=True)
+
 except Exception as e:
-    print(f"Error initializing Vertex AI: {e}")
+    print(f"--- [CRITICAL ERROR] 4. Error initializing Vertex AI: {e} ---", flush=True)
+    print(f"--- [DEBUG] Project ID was: {PROJECT_ID} ---", flush=True)
+    print(f"--- [DEBUG] Location was: {LOCATION} ---", flush=True)
+    sys.stdout.flush() # וידוא הריגה
+    sys.stderr.flush() # וידוא הריגה
     gemini_model = None
+
+print("--- [DEBUG] 5. FINISHED Vertex AI block. App is now loading. ---", flush=True)
 
 
 # --- Initialize the server ---
