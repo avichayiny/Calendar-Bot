@@ -52,7 +52,7 @@ try:
     vertexai.init(project=PROJECT_ID, location=LOCATION)
     print("--- [DEBUG] 2. vertexai.init() FINISHED ---", flush=True)
 
-    gemini_model = GenerativeModel("gemini-1.5-pro")
+    gemini_model = GenerativeModel("gemini-pro")
     print(f"--- [SUCCESS] 3. VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---", flush=True)
 
 except Exception as e:
