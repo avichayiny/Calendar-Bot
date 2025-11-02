@@ -186,7 +186,8 @@ def get_intent_from_llm(message_text):
     and gets back a structured JSON object.
     """
     if not gemini_model:
-        print("Vertex AI model is not initialized. Falling back.")
+        # הוספנו פלאש
+        print("Vertex AI model is not initialized. Falling back.", flush=True)
         return None
 
     # הפרומפט נשאר כמעט זהה, רק בלי הפניות לתאריך
@@ -214,17 +215,18 @@ def get_intent_from_llm(message_text):
     """
     
     try:
-        print("--- Sending prompt to Vertex AI API ---")
-        # קריאה ל-API בדרך החדשה
+        # הוספנו פלאש
+        print("--- Sending prompt to Vertex AI API ---", flush=True)
         response = gemini_model.generate_content(system_prompt)
         
-        # Clean the response to ensure we only get the JSON
         cleaned_response = response.text.strip().replace("```json", "").replace("```", "").strip()
         
-        print(f"--- Received response from Vertex AI: {cleaned_response} ---")
+        # הוספנו פלאש
+        print(f"--- Received response from Vertex AI: {cleaned_response} ---", flush=True)
         return json.loads(cleaned_response)
     except Exception as e:
-        print(f"Error calling Vertex AI API or parsing JSON: {e}")
+        # הוספנו פלאש (זה הכי חשוב!)
+        print(f"Error calling Vertex AI API or parsing JSON: {e}", flush=True)
         return None
 
 # --- Parsing engine (our stable version - no changes) ---
@@ -478,14 +480,14 @@ def webhook():
         
         # --- New User Logic (No Change) ---
         if not user_token:
-            print(f"New user: {sender_phone}. Sending registration link.")
+            print(f"New user: {sender_phone}. Sending registration link." , flush=True)
             registration_link = url_for('register', wa_id=sender_phone, _external=True)
             message = f"שלום! כדי שאוכל ליצור עבורך אירועים, יש לחבר את יומן גוגל שלך דרך הקישור הבא:\n\n{registration_link}"
             send_whatsapp_message(sender_phone, message)
             return 'OK', 200
 
         # --- [NEW BRAIN] Known user logic starts here ---
-        print(f"Known user: {sender_phone}. Processing with LLM: '{message_text}'")
+        print(f"Known user: {sender_phone}. Processing with LLM: '{message_text}'", flush=True)
         
         action = get_intent_from_llm(message_text)
         
@@ -508,7 +510,7 @@ def webhook():
             # --- Execute action based on the LLM's recognized intent ---
             
             if intent == "CREATE":
-                print("LLM Intent: CREATE")
+                print("LLM Intent: CREATE", flush=True)
                 if not event_title: 
                     event_title = "אירוע ללא כותרת" # Default title if LLM forgets
                 
@@ -523,7 +525,7 @@ def webhook():
                 send_whatsapp_message(sender_phone, confirmation_message)
 
             elif intent == "QUERY":
-                print("LLM Intent: QUERY")
+                print("LLM Intent: QUERY", flush=True)
                 events = get_events_for_day(user_token, target_datetime.date())
                 
                 if events is None:
@@ -540,7 +542,7 @@ def webhook():
                 send_whatsapp_message(sender_phone, response_message)
 
             elif intent == "DELETE":
-                print("LLM Intent: DELETE")
+                print("LLM Intent: DELETE", flush=True)
                 # This logic is simpler for now. We can make it more complex later.
                 # For now, it just demonstrates the intent was understood.
                 # A full implementation would query events around `target_datetime`
@@ -551,7 +553,7 @@ def webhook():
                 send_whatsapp_message(sender_phone, "הבנתי את כוונתך, אבל אני עוד לא תומך בפעולה הזו.")
 
         except Exception as e:
-            print(f"Error processing LLM action: {e}")
+            print(f"Error processing LLM action: {e}", flush=True)
             send_whatsapp_message(sender_phone, "מצטער, משהו השתבש בעיבוד הבקשה שלך.")
             
         return 'OK', 200
