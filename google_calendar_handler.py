@@ -112,7 +112,7 @@ def delete_event(user_refresh_token, event_id):
         print(f"An error occurred in delete_event: {e}")
         return False # Return False on failure
     
-    
+
 def delete_event_at_time(user_token, target_datetime):
     """
     Finds and deletes a single event that starts at the exact target_datetime.
@@ -120,7 +120,7 @@ def delete_event_at_time(user_token, target_datetime):
     try:
         # --- הנה התיקון ל-"build_service" ---
         # אנחנו בונים מחדש את האובייקט מהטוקן השמור
-        creds_data = json.loads(user_token)
+        creds_data = json.loads(user_token[0])
         creds = Credentials(**creds_data)
         
         # (בעתיד נצטרך לטפל ברענון טוקנים, אבל כרגע נניח שהוא בתוקף)
