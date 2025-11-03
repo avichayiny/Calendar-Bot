@@ -12,7 +12,7 @@ import google.generativeai as genai
 
 # --- Imports from our files ---
 from database_handler import add_user, get_user_token
-from google_calendar_handler import create_event_for_user, get_events_for_day, delete_event
+from google_calendar_handler import create_event_for_user, get_events_for_day, delete_event, delete_event_at_time
 
 # --- Imports for the Google authentication process ---
 from google_auth_oauthlib.flow import Flow
@@ -542,11 +542,14 @@ def webhook():
 
             elif intent == "DELETE":
                 print("LLM Intent: DELETE", flush=True)
-                # This logic is simpler for now. We can make it more complex later.
-                # For now, it just demonstrates the intent was understood.
-                # A full implementation would query events around `target_datetime`
-                # and try to match `event_title` to delete the correct one.
-                send_whatsapp_message(sender_phone, "זיהיתי שאתה רוצה למחוק אירוע. תכונה זו עדיין בפיתוח בגרסת ה-LLM.")
+                
+                # 'target_datetime' כבר חושב עבורנו בחלק העליון של ה-try
+                
+                # קריאה לפונקציית המחיקה החדשה שלנו
+                deletion_message = delete_event_at_time(user_token, target_datetime)
+                
+                # שלח את התוצאה (הצלחה או שגיאה) בחזרה למשתמש
+                send_whatsapp_message(sender_phone, deletion_message)
 
             else:
                 send_whatsapp_message(sender_phone, "הבנתי את כוונתך, אבל אני עוד לא תומך בפעולה הזו.")

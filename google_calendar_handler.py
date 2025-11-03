@@ -2,7 +2,7 @@
 
 import os
 import json
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from google.oauth2.credentials import Credentials # <-- Necessary import
 from googleapiclient.discovery import build
 
@@ -111,3 +111,64 @@ def delete_event(user_refresh_token, event_id):
     except Exception as e:
         print(f"An error occurred in delete_event: {e}")
         return False # Return False on failure
+    
+    
+def delete_event_at_time(user_token, target_datetime):
+    """
+    Finds and deletes a single event that starts at the exact target_datetime.
+    """
+    try:
+        # --- הנה התיקון ל-"build_service" ---
+        # אנחנו בונים מחדש את האובייקט מהטוקן השמור
+        creds_data = json.loads(user_token)
+        creds = Credentials(**creds_data)
+        
+        # (בעתיד נצטרך לטפל ברענון טוקנים, אבל כרגע נניח שהוא בתוקף)
+            
+        service = build('calendar', 'v3', credentials=creds)
+        # --- סוף התיקון ---
+        
+        # אנחנו מחפשים אירוע שמתחיל בדיוק בשעה הזו.
+        # ניקח טווח של דקה אחת.
+        time_min = target_datetime.isoformat() + 'Z'
+        # פה התיקון של "timedelta"
+        time_max = (target_datetime + timedelta(minutes=1)).isoformat() + 'Z'
+
+        print(f"--- Searching for event to delete between {time_min} and {time_max} ---", flush=True)
+
+        events_result = service.events().list(
+            calendarId='primary',
+            timeMin=time_min,
+            timeMax=time_max,
+            maxResults=2,  # אנחנו צריכים לדעת רק אם יש 0, 1, או יותר מ-1
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        events = events_result.get('items', [])
+
+        if not events:
+            print("--- No events found to delete ---", flush=True)
+            return "מצטער, לא מצאתי שום אירוע למחוק בשעה המדויקת שציינת."
+        
+        if len(events) > 1:
+            print(f"--- Found {len(events)} events, too ambiguous ---", flush=True)
+            return "אופס, מצאתי יותר מאירוע אחד בשעה הזו. אני עוד לא יודע איך לבקש ממך לבחור."
+        
+        # הצלחה! מצאנו בדיוק אירוע אחד
+        event_to_delete = events[0]
+        event_id = event_to_delete['id']
+        event_summary = event_to_delete.get('summary', 'ללא כותרת')
+
+        print(f"--- Deleting event: {event_summary} (ID: {event_id}) ---", flush=True)
+
+        service.events().delete(
+            calendarId='primary',
+            eventId=event_id
+        ).execute()
+
+        return f"מחקתי! האירוע '{event_summary}' בוטל."
+
+    except Exception as e:
+        print(f"Error in delete_event_at_time: {e}", flush=True)
+        return "אירעה שגיאה בזמן ניסיון המחיקה. אולי פג התוקף של ההרשאה שלך?"
