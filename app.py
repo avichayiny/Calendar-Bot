@@ -8,8 +8,7 @@ from flask import Flask, request, redirect, session, url_for
 from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 import google.generativeai as genai
-import vertexai
-from vertexai.generative_models import GenerativeModel, Part
+
 
 # --- Imports from our files ---
 from database_handler import add_user, get_user_token
