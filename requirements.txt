@@ -7,4 +7,3 @@ psycopg2-binary
 google-api-python-client
 google-auth-oauthlib
 google-generativeai
-google-cloud-aiplatform

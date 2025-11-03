@@ -37,7 +37,7 @@ print(f"--- [DEBUG] 0.5. Got ENV VARS (Project ID is: {PROJECT_ID}) ---", flush=
 
 SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.profile']
 
-"""
+
 try:
     genai.configure(api_key=GEMINI_API_KEY)
     gemini_model = genai.GenerativeModel('gemini-pro') # 'gemini-pro'
@@ -45,14 +45,14 @@ try:
 except Exception as e:
     print(f"Error initializing Gemini: {e}")
     gemini_model = None
-"""
 
+"""
 try:
     print("--- [DEBUG] 1. Inside TRY block. About to init Vertex AI ---", flush=True)
     vertexai.init(project=PROJECT_ID, location=LOCATION)
     print("--- [DEBUG] 2. vertexai.init() FINISHED ---", flush=True)
 
-    gemini_model = GenerativeModel("gemini-pro")
+    gemini_model = GenerativeModel("gemini-1.5-pro")
     print(f"--- [SUCCESS] 3. VERTEX AI MODEL INITIALIZED (Region: {LOCATION}) ---", flush=True)
 
 except Exception as e:
@@ -62,7 +62,7 @@ except Exception as e:
     sys.stdout.flush() # וידוא הריגה
     sys.stderr.flush() # וידוא הריגה
     gemini_model = None
-
+"""
 print("--- [DEBUG] 5. FINISHED Vertex AI block. App is now loading. ---", flush=True)
 
 
@@ -132,7 +132,7 @@ def send_whatsapp_message(to_phone_number, message):
 
 
 # --- [New] The Bot's Brain - LLM Based ---
-def get_intent_from_llm1(message_text):
+def get_intent_from_llm(message_text):
     """
     Sends a user message to the Gemini API and gets back a structured JSON object
     with the intent and entities.
@@ -180,7 +180,7 @@ def get_intent_from_llm1(message_text):
         print(f"Error calling Gemini API or parsing JSON: {e}")
         return None
 
-def get_intent_from_llm(message_text):
+def get_intent_from_llm1(message_text):
     """
     Sends a user message to the Vertex AI API (in us-central1)
     and gets back a structured JSON object.
