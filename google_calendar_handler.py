@@ -113,25 +113,26 @@ def delete_event(user_refresh_token, event_id):
         return False # Return False on failure
     
 
-def delete_event_at_time(user_token, target_datetime):
+def delete_event_at_time(user_refresh_token, target_datetime):
     """
     Finds and deletes a single event that starts at the exact target_datetime.
     """
     try:
-        # --- הנה התיקון ל-"build_service" ---
-        # אנחנו בונים מחדש את האובייקט מהטוקן השמור
-        creds_data = json.loads(user_token[0])
-        creds = Credentials(**creds_data)
-        
-        # (בעתיד נצטרך לטפל ברענון טוקנים, אבל כרגע נניח שהוא בתוקף)
-            
+        # --- התיקון האמיתי: שימוש בשיטת האימות הנכונה ---
+        creds = Credentials.from_authorized_user_info(
+            info={
+                'refresh_token': user_refresh_token,
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET
+            },
+            scopes=SCOPES
+        )
         service = build('calendar', 'v3', credentials=creds)
         # --- סוף התיקון ---
         
         # אנחנו מחפשים אירוע שמתחיל בדיוק בשעה הזו.
         # ניקח טווח של דקה אחת.
         time_min = target_datetime.isoformat() + 'Z'
-        # פה התיקון של "timedelta"
         time_max = (target_datetime + timedelta(minutes=1)).isoformat() + 'Z'
 
         print(f"--- Searching for event to delete between {time_min} and {time_max} ---", flush=True)
