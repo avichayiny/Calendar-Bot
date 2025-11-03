@@ -39,7 +39,7 @@ SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.co
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-pro') # 'gemini-pro'
+    gemini_model = genai.GenerativeModel('gemini-1.5-pro-latest') # 'gemini-pro'
     print("--- GEMINI MODEL INITIALIZED ---")
 except Exception as e:
     print(f"Error initializing Gemini: {e}")
