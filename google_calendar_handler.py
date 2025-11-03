@@ -5,6 +5,7 @@ import json
 from datetime import datetime, time, timedelta
 from google.oauth2.credentials import Credentials # <-- Necessary import
 from googleapiclient.discovery import build
+from zoneinfo import ZoneInfo
 
 # --- Settings read from environment variables ---
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -129,11 +130,17 @@ def delete_event_at_time(user_refresh_token, target_datetime):
         )
         service = build('calendar', 'v3', credentials=creds)
         # --- סוף התיקון ---
+
+        # --- ⭐️ התיקון הקריטי: הוספת אזור זמן ⭐️ ---
+        # ה-LLM שולח לנו זמן "נאיבי" (בלי אזור). אנחנו נהפוך אותו ל"מודע".
+        local_tz = ZoneInfo("Asia/Jerusalem")
+        aware_target_datetime = target_datetime.replace(tzinfo=local_tz)
         
-        # אנחנו מחפשים אירוע שמתחיל בדיוק בשעה הזו.
-        # ניקח טווח של דקה אחת.
-        time_min = target_datetime.isoformat() + 'Z'
-        time_max = (target_datetime + timedelta(minutes=1)).isoformat() + 'Z'
+        # עכשיו ה-ISO format יכלול את האופסט הנכון (למשל +02:00)
+        time_min = aware_target_datetime.isoformat()
+        # אנחנו עדיין מחפשים בטווח של דקה אחת
+        time_max = (aware_target_datetime + timedelta(minutes=1)).isoformat()
+        # --- סוף תיקון אזור הזמן ---
 
         print(f"--- Searching for event to delete between {time_min} and {time_max} ---", flush=True)
 
