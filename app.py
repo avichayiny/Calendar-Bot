@@ -137,7 +137,7 @@ def get_intent_from_llm(message_text):
     with the intent and entities.
     """
     if not gemini_model:
-        print("Gemini model is not initialized. Falling back.")
+        print("Gemini model is not initialized. Falling back.", flush=True)
         return None
 
     # The prompt is our instruction to the model. It's critical.
@@ -167,16 +167,16 @@ def get_intent_from_llm(message_text):
     """
     
     try:
-        print("--- Sending prompt to Gemini API ---")
+        print("--- Sending prompt to Gemini API ---", flush=True)
         response = gemini_model.generate_content(system_prompt)
         
         # Clean the response to ensure we only get the JSON
         cleaned_response = response.text.strip().replace("```json", "").replace("```", "").strip()
         
-        print(f"--- Received response from Gemini: {cleaned_response} ---")
+        print(f"--- Received response from Gemini: {cleaned_response} ---", flush=True)
         return json.loads(cleaned_response)
     except Exception as e:
-        print(f"Error calling Gemini API or parsing JSON: {e}")
+        print(f"Error calling Gemini API or parsing JSON: {e}", flush=True)
         return None
 
 def get_intent_from_llm1(message_text):
