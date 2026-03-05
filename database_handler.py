@@ -1,58 +1,74 @@
-# database_handler.py (Modified version for public IP connection)
+# database_handler.py (SQLAlchemy Version)
 import os
-import psycopg2
+from sqlalchemy import create_engine, Column, String, Text
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.dialects.postgresql import insert
 
-# Load public connection details from environment variables
-DB_USER = os.getenv('DB_USER')
-DB_PASS = os.getenv('DB_PASS')
-DB_NAME = os.getenv('DB_NAME')
-DB_HOST = os.getenv('DB_HOST') # <-- The important variable for public connection
+# שולפים את המחרוזת היחידה מהגדרות הסביבה
+DATABASE_URL = os.getenv('DATABASE_URL')
 
-def get_connection():
-    """Creates and opens a connection to the database via public IP."""
-    try:
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            dbname=DB_NAME,
-            user=DB_USER,
-            password=DB_PASS
-        )
-        return conn
-    except Exception as e:
-        print(f"Error connecting to the database via public IP: {e}")
-        return None
+# יצירת מנוע החיבור עם Pooling שמותאם לענן
+engine = create_engine(
+    DATABASE_URL, 
+    pool_size=5, 
+    max_overflow=10,
+    pool_pre_ping=True # מוודא שהחיבור לא נותק לפני שהוא משתמש בו
+)
 
-# --- The rest of the functions remain identical ---
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# הגדרת מודל הטבלה שלנו
+class User(Base):
+    __tablename__ = "users"
+    
+    whatsapp_id = Column(String(50), primary_key=True, index=True)
+    google_refresh_token = Column(Text)
+    user_name = Column(String(100))
+
+def init_db():
+    """יוצר את הטבלאות ב-DB אם הן לא קיימות (מעולה ל-Neon ריק)"""
+    Base.metadata.create_all(bind=engine)
+    print("Database tables verified/created successfully via SQLAlchemy.")
 
 def add_user(whatsapp_id, refresh_token, user_name):
-    conn = get_connection()
-    if not conn: return
-
-    with conn.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO users (whatsapp_id, google_refresh_token, user_name) 
-            VALUES (%s, %s, %s)
-            ON CONFLICT (whatsapp_id) 
-            DO UPDATE SET google_refresh_token = EXCLUDED.google_refresh_token, user_name = EXCLUDED.user_name;
-            """,
-            (whatsapp_id, refresh_token, user_name)
+    db = SessionLocal()
+    try:
+        # בונים את פעולת ההכנסה
+        stmt = insert(User).values(
+            whatsapp_id=whatsapp_id,
+            google_refresh_token=refresh_token,
+            user_name=user_name
         )
-    conn.commit()
-    conn.close()
-    print(f"User {whatsapp_id} ({user_name}) was added/updated in the PostgreSQL database.")
+        
+        # מגדירים מה קורה אם המשתמש כבר קיים (Upsert)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['whatsapp_id'],
+            set_={
+                'google_refresh_token': refresh_token,
+                'user_name': user_name
+            }
+        )
+        
+        db.execute(stmt)
+        db.commit()
+        print(f"User {whatsapp_id} ({user_name}) was added/updated.")
+    except Exception as e:
+        print(f"Error saving user: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 def get_user_token(whatsapp_id):
-    conn = get_connection()
-    if not conn: return None
-
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT google_refresh_token FROM users WHERE whatsapp_id = %s", (whatsapp_id,))
-        result = cursor.fetchone()
-    
-    conn.close()
-    
-    if result:
-        return result[0] 
-    else:
+    db = SessionLocal()
+    try:
+        # שליפה פשוטה ונקייה של המשתמש
+        user = db.query(User).filter(User.whatsapp_id == whatsapp_id).first()
+        if user:
+            return user.google_refresh_token
         return None
+    except Exception as e:
+        print(f"Error fetching token: {e}")
+        return None
+    finally:
+        db.close()

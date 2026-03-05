@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from datetime import datetime, time, timedelta
 import google.generativeai as genai
 
-
 # --- Imports from our files ---
-from database_handler import add_user, get_user_token
+# ⭐️ הוספנו כאן את הייבוא של init_db
+from database_handler import add_user, get_user_token, init_db 
 from google_calendar_handler import create_event_for_user, get_events_for_day, delete_event, delete_event_at_time
 
 # --- Imports for the Google authentication process ---
@@ -69,6 +69,9 @@ print("--- [DEBUG] 5. FINISHED Vertex AI block. App is now loading. ---", flush=
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.getenv('FLASK_SECRET_KEY')
+
+# ⭐️ הנה קסם האתחול: זה ירוץ ברגע ש-Cloud Run מרים את השרת
+init_db()
 
 # --- [Our addition] Health check endpoint ---
 @app.route('/')
@@ -543,10 +546,13 @@ def webhook():
             elif intent == "DELETE":
                 print("LLM Intent: DELETE", flush=True)
                 
-                # 'target_datetime' כבר חושב עבורנו בחלק העליון של ה-try
+                # 'target_datetime' כבר חושב עבורנו
                 
-                # קריאה לפונקציית המחיקה החדשה שלנו
-                deletion_message = delete_event_at_time(user_token, target_datetime)
+                # ⭐️ שינוי 1: אנחנו שולפים גם את הכותרת מה-LLM
+                event_title = action.get("event_title") 
+                
+                # ⭐️ שינוי 2: אנחנו מעבירים את הכותרת לפונקציית המחיקה
+                deletion_message = delete_event_at_time(user_token, target_datetime, event_title)
                 
                 # שלח את התוצאה (הצלחה או שגיאה) בחזרה למשתמש
                 send_whatsapp_message(sender_phone, deletion_message)
@@ -560,22 +566,7 @@ def webhook():
             
         return 'OK', 200
 
-# --- Route for resetting the database (no change) ---
-@app.route('/reset-database-for-testing')
-# ... (הקוד של הפונקציה נשאר זהה) ...
-
-# --- Route for resetting the database ---
-@app.route('/reset-database-for-testing')
-def reset_database():
-    db_file = "bot_database.db"
-    if os.path.exists(db_file): os.remove(db_file)
-    import sqlite3
-    conn = sqlite3.connect(db_file); cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-        whatsapp_id TEXT PRIMARY KEY, google_refresh_token TEXT NOT NULL,
-        user_name TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit(); conn.close()
-    return "<h1>Database has been reset successfully!</h1>"
-
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # ⭐️ התאמה ל-Cloud Run: שימוש במשתנה PORT אם הוא קיים, אחרת 8080
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=True)
