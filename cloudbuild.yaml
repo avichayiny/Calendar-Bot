@@ -9,10 +9,7 @@ steps:
         python database_setup.py
     # Pass environment variables to this step
     env:
-      - 'DB_USER=${_DB_USER}'
-      - 'DB_PASS=${_DB_PASS}'
-      - 'DB_NAME=${_DB_NAME}'
-      - 'DB_HOST=${_DB_HOST}'
+      - 'DB_URL=${_DB_URL}'
     id: 'Setup'
 
   # Step 2: Build the Docker image
@@ -42,11 +39,9 @@ steps:
       - 'me-west1-docker.pkg.dev/$PROJECT_ID/whatsapp-bot-repo/calendar-bot:latest'
       - '--region'
       - 'us-central1'
-      - '--add-cloudsql-instances'
-      - '${_INSTANCE_CONNECTION_NAME}'
       - '--quiet'
       - '--set-env-vars'
-      - "DB_HOST=${_DB_HOST},DB_USER=${_DB_USER},DB_PASS=${_DB_PASS},DB_NAME=${_DB_NAME},META_VERIFY_TOKEN=${_META_VERIFY_TOKEN},META_ACCESS_TOKEN=${_META_ACCESS_TOKEN},META_PHONE_NUMBER_ID=${_META_PHONE_NUMBER_ID},GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${_GOOGLE_CLIENT_SECRET},FLASK_SECRET_KEY=${_FLASK_SECRET_KEY},GEMINI_API_KEY=${_GEMINI_API_KEY}, GOOGLE_CLOUD_PROJECT=${_GOOGLE_CLOUD_PROJECT}"
+      - "DATABASE_URL=${_DATABASE_URL},META_VERIFY_TOKEN=${_META_VERIFY_TOKEN},META_ACCESS_TOKEN=${_META_ACCESS_TOKEN},META_PHONE_NUMBER_ID=${_META_PHONE_NUMBER_ID},GOOGLE_CLIENT_ID=${_GOOGLE_CLIENT_ID},GOOGLE_CLIENT_SECRET=${_GOOGLE_CLIENT_SECRET},FLASK_SECRET_KEY=${_FLASK_SECRET_KEY},GEMINI_API_KEY=${_GEMINI_API_KEY},GOOGLE_CLOUD_PROJECT=${_GOOGLE_CLOUD_PROJECT}"
     id: 'Deploy'
 
 # General options
