@@ -311,45 +311,70 @@ def register():
 @app.route('/start-auth')
 def start_auth():
     session['whatsapp_id'] = request.args.get('wa_id')
-    # --- [Our addition] ---
-    generated_redirect_uri = url_for('oauth2callback', _external=True)
-    print(f"--- GENERATED REDIRECT URI: '{generated_redirect_uri}' ----")
-    # -------------------------
+    
+    # 1. מכריחים את הכתובת להיות מאובטחת ב-HTTPS
+    redirect_uri = url_for('oauth2callback', _external=True, _scheme='https')
+    print(f"--- GENERATED REDIRECT URI: '{redirect_uri}' ----", flush=True)
 
     flow = Flow.from_client_config(
         client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
-        scopes=SCOPES, redirect_uri=url_for('oauth2callback', _external=True)
+        scopes=SCOPES, redirect_uri=redirect_uri
     )
+    
     authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent')
+    
+    # 2. שומרים את ה-state ואת סוד האבטחה (code_verifier) בזיכרון!
     session['state'] = state
+    session['code_verifier'] = flow.code_verifier  # <--- זו השורה שהייתה חסרה
+    
     return redirect(authorization_url)
 
 @app.route('/oauth2callback')
 def oauth2callback():
-    state = session['state']
+    state = session.get('state')
+    
+    # הוספנו _scheme='https' כדי להכריח את פלאסק לייצר כתובת מאובטחת
     flow = Flow.from_client_config(
         client_config={ "web": { "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET, "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token" }},
-        scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True)
+        scopes=SCOPES, 
+        state=state, 
+        redirect_uri=url_for('oauth2callback', _external=True, _scheme='https') 
     )
+    
+    # שולפים את סוד האבטחה מהזיכרון (אם קיים)
+    if 'code_verifier' in session:
+        flow.code_verifier = session['code_verifier']
+
     try:
-        flow.fetch_token(authorization_response=request.url)
+        # הטריק של Cloud Run: מכריחים את הכתובת הנכנסת להיות HTTPS
+        auth_response = request.url.replace('http://', 'https://')
+        
+        flow.fetch_token(authorization_response=auth_response)
         credentials = flow.credentials
-        if not credentials or not credentials.refresh_token: return "<h1>שגיאה: לא התקבל מפתח רענון מגוגל.</h1>", 400
+        
+        if not credentials or not credentials.refresh_token: 
+            return "<h1>שגיאה: לא התקבל מפתח רענון מגוגל. האם סימנת V על הרשאות היומן?</h1>", 400
+            
         refresh_token = credentials.refresh_token
         whatsapp_id = session['whatsapp_id']
         user_info_service = build('oauth2', 'v2', credentials=credentials)
         user_info = user_info_service.userinfo().get().execute()
         user_name = user_info.get('name', 'User')
+        
         add_user(whatsapp_id, refresh_token, user_name)
+        
         try:
             welcome_message = f"היי {user_name}, החיבור הושלם! 🎉\n\nעכשיו היומן שלך מחובר. אתה יכול להתחיל לשלוח לי הודעות כמו:\n- 'פגישה חשובה מחר ב-10'\n- 'מה הלוז מחר?'\n- 'בטל את הפגישה של 10'"
             send_whatsapp_message(whatsapp_id, welcome_message)
         except Exception as e:
             print(f"Failed to send welcome message to {whatsapp_id}: {e}")
+            
         return "<h1>החיבור הושלם בהצלחה!</h1><p>אפשר לסגור את הדף ולחזור לוואטסאפ.</p>"
+        
     except Exception as e:
-        print(f"Error in oauth2callback: {e}")
-        return "<h1>אירעה שגיאה בתהליך האימות.</h1>", 500
+        # עכשיו נדפיס את השגיאה האמיתית למסך כדי שלא נצטרך לנחש
+        print(f"Error in oauth2callback: {e}", flush=True)
+        return f"<h1>אירעה שגיאה בתהליך האימות:</h1><p>{e}</p>", 500
 
 """
 # --- Main Webhook with triple intent detection (fixed) ---
