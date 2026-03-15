@@ -5,7 +5,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.dialects.postgresql import insert
 
 # שולפים את המחרוזת היחידה מהגדרות הסביבה
-DATABASE_URL = os.getenv('DATABASE_URL')
+DATABASE_URL = os.getenv('DB_URL')
 
 # יצירת מנוע החיבור עם Pooling שמותאם לענן
 engine = create_engine(
