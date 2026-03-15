@@ -7,6 +7,11 @@ from sqlalchemy.dialects.postgresql import insert
 # שולפים את המחרוזת היחידה מהגדרות הסביבה
 DATABASE_URL = os.getenv('DB_URL')
 
+print("--- DEBUG VARS ---", flush=True)
+print("Is DATABASE_URL present?:", "YES" if DATABASE_URL else "NO", flush=True)
+# מדפיס רק את השמות של המשתנים שהשרת רואה (בלי הערכים, כדי לשמור על אבטחה)
+print("Keys seen by server:", list(os.environ.keys()), flush=True)
+
 # יצירת מנוע החיבור עם Pooling שמותאם לענן
 engine = create_engine(
     DATABASE_URL, 
