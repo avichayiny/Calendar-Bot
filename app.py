@@ -73,11 +73,31 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY')
 # ⭐️ הנה קסם האתחול: זה ירוץ ברגע ש-Cloud Run מרים את השרת
 init_db()
 
-# --- [Our addition] Health check endpoint ---
+# --- [Our addition] Root: דף HTML בדפדפן; עדיין 200 לבדיקות חיים (Cloud Run וכו') ---
 @app.route('/')
 def health_check():
-    """A simple endpoint that Cloud Run can probe to verify the service is live."""
-    return "OK", 200
+    html = """<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>השרת עובד</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: flex; justify-content: center;
+      align-items: center; min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
+    main { text-align: center; padding: 2rem; }
+    h1 { font-size: 1.75rem; font-weight: 600; }
+    p { color: #94a3b8; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>השרת עובד</h1>
+    <p>השרת רץ כרגיל.</p>
+  </main>
+</body>
+</html>"""
+    return html, 200
 
 # --- [Upgrade] Meta-compatible helper functions (with debug) ---
 def parse_whatsapp_message(data):
